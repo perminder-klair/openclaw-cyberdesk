@@ -2,6 +2,8 @@
 
 A dual SPI display command center for Raspberry Pi 4, designed as a physical dashboard for [OpenClaw](https://github.com/openclawai/openclaw) AI agents. Features a cyberpunk-themed UI with Molty the space lobster mascot.
 
+[![Watch the video](https://img.youtube.com/vi/Pq3205RoOsI/maxresdefault.jpg)](https://www.youtube.com/watch?v=Pq3205RoOsI)
+
 ![Main Display](preview_cyberpunk_main.png)
 ![Status Display](preview_cyberpunk_status.png)
 
