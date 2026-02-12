@@ -4,6 +4,8 @@ A dual SPI display command center for Raspberry Pi 4, designed as a physical das
 
 [![Watch the video](https://img.youtube.com/vi/Pq3205RoOsI/maxresdefault.jpg)](https://www.youtube.com/watch?v=Pq3205RoOsI)
 
+> **Need a server for OpenClaw?** Launch your own instance with [Hostinger](https://www.hostinger.com/codingwithlewis)
+
 ![Main Display](preview_cyberpunk_main.png)
 ![Status Display](preview_cyberpunk_status.png)
 
