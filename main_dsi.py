@@ -247,6 +247,10 @@ class DSICommandCenter:
             self._cancel_voice()
             return
 
+        # Cancel any stale listening session before starting fresh
+        self.hardware.cancel_listening()
+        time.sleep(0.1)
+
         # Start listening
         print("[Main] Starting voice recording")
         if not self.hardware.start_listening(mode="assistant"):
@@ -293,6 +297,7 @@ class DSICommandCenter:
 
             state = status.get("state", "idle")
             transcript = status.get("lastTranscript")
+            print(f"[Main] Voice poll: state={state}, transcript={transcript}, seen_active={seen_active}, raw={status}")
 
             # Track when we've seen the hardware actually start recording
             if state in ("listening", "processing"):
