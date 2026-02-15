@@ -263,7 +263,7 @@ class HardwareClient:
         result = self._request("POST", self.endpoints["voice_listen"], json={"mode": mode})
         if result is None:
             return False
-        if "error" in result:
+        if result.get("error"):
             print(f"[Hardware] Voice listen error: {result['error']}")
             return False
         return True
