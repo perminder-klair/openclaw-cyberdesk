@@ -134,6 +134,104 @@ python main.py
 python main.py --demo
 ```
 
+## Running as a Service
+
+To run the CyberDeck display automatically on boot:
+
+### Initial Setup
+
+1. **Enable user service persistence:**
+   ```bash
+   sudo loginctl enable-linger $USER
+   ```
+
+2. **Reload systemd and enable the service:**
+   ```bash
+   systemctl --user daemon-reload
+   systemctl --user enable openclaw-cyberdeck.service
+   systemctl --user start openclaw-cyberdeck.service
+   ```
+
+### Service Management
+
+Use the included helper script for quick control:
+
+```bash
+# Start the service
+./service-control.sh start
+
+# Stop the service
+./service-control.sh stop
+
+# Restart the service
+./service-control.sh restart
+
+# Check status
+./service-control.sh status
+
+# View live logs
+./service-control.sh logs
+
+# Disable auto-start
+./service-control.sh disable
+
+# Re-enable auto-start
+./service-control.sh enable
+```
+
+Or use systemctl directly:
+
+```bash
+# Check if service is running
+systemctl --user status openclaw-cyberdeck.service
+
+# View logs (live tail)
+journalctl --user -u openclaw-cyberdeck.service -f
+
+# View last 100 log lines
+journalctl --user -u openclaw-cyberdeck.service -n 100
+```
+
+### How It Works
+
+- Service file located at: `~/.config/systemd/user/openclaw-cyberdeck.service`
+- Starts automatically after graphical environment is ready
+- Auto-restarts on failure (5 second delay)
+- Handles graceful shutdown when stopped
+- Logs to systemd journal (accessible via `journalctl`)
+
+### Troubleshooting
+
+**Service won't start:**
+```bash
+# Check for errors in logs
+journalctl --user -u openclaw-cyberdeck.service -n 50
+
+# Check if X11 display is available
+echo $DISPLAY  # Should show :0
+
+# Verify virtual environment exists
+ls -la /home/klair/Projects/OpenClaw-CyberDeck/.venv/bin/python
+```
+
+**Service starts but display is black:**
+- Check hardware connections
+- Verify SPI is enabled: `ls /dev/spidev0.*`
+- Run manually to see detailed errors: `./venv/bin/python main_dsi.py`
+
+**Want to run manually while service is enabled:**
+```bash
+# Stop the service first to avoid conflicts
+./service-control.sh stop
+
+# Run manually
+source .venv/bin/activate
+python main_dsi.py
+
+# Restart service when done
+./service-control.sh start
+```
+
 ## Architecture
 
 | Module | Description |

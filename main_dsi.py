@@ -152,8 +152,23 @@ class DSICommandCenter:
                 cost=status.get("api_cost", 0.0)
             )
 
+        def on_message_complete(message):
+            """Handle completed response from OpenClaw."""
+            content = message.get("content", "")
+            self.display.add_activity("status", "Response", content, "done")
+
+            self._set_molty_state_with_timer(MoltyState.SUCCESS, 2.0)
+            self.hardware.set_led_state("success")
+            self.display.set_status_text("Done. Tap a command.")
+
+            if self._active_button_id:
+                self.display.set_button_state(self._active_button_id, "success")
+                self._reset_button_after_delay(self._active_button_id, 1.0)
+                self._active_button_id = None
+
         self.bridge.set_callbacks(
             on_message_chunk=on_message_chunk,
+            on_message_complete=on_message_complete,
             on_notification=on_notification,
             on_status_change=on_status_update,
             on_connection_change=on_connection_change,
@@ -192,6 +207,17 @@ class DSICommandCenter:
         def on_tap(x, y):
             """Handle tap events."""
             print(f"[Main] Tap at ({x}, {y})")
+
+            # Dismiss overlay if visible (consumes tap)
+            if self.display.is_overlay_visible():
+                self.display.dismiss_overlay()
+                return
+
+            # Check if tap hits an activity entry with detail text
+            entry = self.display.find_activity_entry(x, y)
+            if entry and entry.detail:
+                self.display.show_overlay(entry)
+                return
 
             button = self.display.find_button(x, y)
 
@@ -260,6 +286,11 @@ class DSICommandCenter:
         def on_long_press(x, y):
             """Handle long press events."""
             print(f"[Main] Long press at ({x}, {y})")
+
+            # Dismiss overlay if visible (consumes long press)
+            if self.display.is_overlay_visible():
+                self.display.dismiss_overlay()
+                return
 
             if y < config.LAYOUT["header_height"]:
                 # Long press on header - force reconnect

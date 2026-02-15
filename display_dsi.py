@@ -63,6 +63,9 @@ class DSIDisplay:
         self._fonts = {}
         self._load_fonts()
 
+        # Overlay state
+        self._overlay_entry: Optional[ActivityEntry] = None
+
         # Pre-rendered button rects
         self._button_rects = []
 
@@ -161,6 +164,77 @@ class DSIDisplay:
         """Find button at coordinates."""
         return self.button_tester.find_button(x, y)
 
+    # === Overlay ===
+
+    def show_overlay(self, entry: ActivityEntry):
+        """Show fullscreen overlay for an activity entry."""
+        with self.lock:
+            self._overlay_entry = entry
+
+    def dismiss_overlay(self):
+        """Dismiss the fullscreen overlay."""
+        with self.lock:
+            self._overlay_entry = None
+
+    def is_overlay_visible(self) -> bool:
+        """Check if overlay is currently visible."""
+        with self.lock:
+            return self._overlay_entry is not None
+
+    def find_activity_entry(self, x: int, y: int) -> Optional[ActivityEntry]:
+        """Find the activity entry at the given tap coordinates."""
+        layout = config.LAYOUT
+        molty_panel_w = layout["molty_panel_width"]
+        header_h = layout["header_height"]
+        right_x = molty_panel_w
+        right_w = self.width - molty_panel_w
+        content_h = self.height - header_h
+        activity_h = int(content_h * layout["activity_feed_height_ratio"])
+
+        # Activity feed bounds
+        feed_x = right_x
+        feed_y = header_h
+        feed_w = right_w
+
+        # Entries start after activity header
+        activity_header_h = layout["activity_header_height"]
+        entries_y = feed_y + activity_header_h + 2
+        entry_h = layout["activity_entry_height"]
+        entries_area_h = activity_h - activity_header_h - 25
+
+        # Check if tap is in the entries area
+        if x < feed_x + 10 or x > feed_x + feed_w - 10:
+            return None
+        if y < entries_y or y > entries_y + entries_area_h:
+            return None
+
+        # Get visible entries (same logic as _draw_activity_feed)
+        with self.lock:
+            entries = list(self.activity_feed.entries)
+            scroll_offset = self._scroll_offset
+
+        max_visible = layout["activity_max_visible"]
+        total = len(entries)
+        if total == 0:
+            return None
+
+        max_scroll = max(0, total - max_visible)
+        scroll_offset = max(0, min(scroll_offset, max_scroll))
+        end_idx = total - scroll_offset
+        start_idx = max(0, end_idx - max_visible)
+        visible = list(reversed(entries[start_idx:end_idx]))
+
+        # Find which entry was tapped
+        ey = entries_y
+        for entry in visible:
+            if ey + entry_h > entries_y + entries_area_h:
+                break
+            if ey <= y < ey + entry_h:
+                return entry
+            ey += entry_h
+
+        return None
+
     # === Rendering ===
 
     def render(self) -> Image.Image:
@@ -196,6 +270,12 @@ class DSIDisplay:
 
         # Button panel
         self._draw_button_panel(draw, right_x, header_h + activity_h, right_w, button_h)
+
+        # Overlay (drawn on top of all panels)
+        with self.lock:
+            overlay_entry = self._overlay_entry
+        if overlay_entry is not None:
+            self._draw_overlay(draw, overlay_entry)
 
         # Scanlines effect
         self.theme.draw_scanlines(image, spacing=3, opacity=15)
@@ -598,6 +678,114 @@ class DSIDisplay:
                 return truncated
 
         return "..."
+
+    def _word_wrap(self, text: str, font, max_width: int) -> List[str]:
+        """Word-wrap text to fit within max_width pixels."""
+        lines = []
+        for paragraph in text.split("\n"):
+            if not paragraph:
+                lines.append("")
+                continue
+            words = paragraph.split(" ")
+            current_line = ""
+            for word in words:
+                test = f"{current_line} {word}".strip() if current_line else word
+                bbox = font.getbbox(test)
+                if bbox[2] - bbox[0] <= max_width:
+                    current_line = test
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
+            if current_line:
+                lines.append(current_line)
+        return lines
+
+    def _draw_overlay(self, draw: ImageDraw.Draw, entry: ActivityEntry):
+        """Draw fullscreen overlay showing full entry content."""
+        # Dark background fill
+        draw.rectangle([0, 0, self.width, self.height], fill=(5, 5, 10, 230))
+
+        # Content panel with margins
+        margin_x, margin_y = 60, 50
+        panel_x1 = margin_x
+        panel_y1 = margin_y
+        panel_x2 = self.width - margin_x
+        panel_y2 = self.height - margin_y
+
+        # Panel background
+        draw.rectangle([panel_x1, panel_y1, panel_x2, panel_y2], fill=(12, 12, 20))
+
+        # Cyberpunk border
+        self.theme.draw_panel_border(draw, (panel_x1, panel_y1, panel_x2, panel_y2))
+
+        # Type color bar at top
+        type_colors = {
+            "tool": config.COLORS["neon_cyan"],
+            "message": config.COLORS["hot_pink"],
+            "status": config.COLORS["electric_purple"],
+            "error": config.COLORS["neon_red"],
+            "notification": config.COLORS["amber"],
+        }
+        bar_color = type_colors.get(entry.type, config.COLORS["neon_cyan"])
+        draw.rectangle([panel_x1, panel_y1, panel_x2, panel_y1 + 4], fill=bar_color)
+
+        # Content area
+        content_x = panel_x1 + 25
+        content_y = panel_y1 + 20
+        content_w = (panel_x2 - panel_x1) - 50
+
+        # Title with neon glow
+        self.theme.draw_neon_text(
+            draw, (content_x, content_y),
+            entry.title,
+            self._fonts["large"],
+            bar_color,
+            glow_layers=1
+        )
+
+        # Timestamp right-aligned
+        time_str = entry.timestamp.strftime("%H:%M:%S")
+        time_bbox = self._fonts["mono"].getbbox(time_str)
+        time_w = time_bbox[2] - time_bbox[0]
+        draw.text(
+            (panel_x2 - 25 - time_w, content_y + 5),
+            time_str,
+            font=self._fonts["mono"],
+            fill=config.COLORS["text_dim"]
+        )
+
+        # Separator line
+        sep_y = content_y + 45
+        draw.line([(content_x, sep_y), (panel_x2 - 25, sep_y)],
+                  fill=config.COLORS["panel_border"], width=1)
+
+        # Word-wrapped detail text
+        text_y = sep_y + 15
+        line_height = 46
+        max_text_y = panel_y2 - 55  # Leave room for hint
+
+        if entry.detail:
+            wrapped = self._word_wrap(entry.detail, self._fonts["large"], content_w)
+            for line in wrapped:
+                if text_y + line_height > max_text_y:
+                    draw.text((content_x, text_y), "...",
+                              font=self._fonts["large"],
+                              fill=config.COLORS["text_dim"])
+                    break
+                draw.text((content_x, text_y), line,
+                          font=self._fonts["large"],
+                          fill=config.COLORS["text_primary"])
+                text_y += line_height
+
+        # "TAP TO CLOSE" hint centered at bottom
+        hint = "TAP TO CLOSE"
+        hint_bbox = self._fonts["mono"].getbbox(hint)
+        hint_w = hint_bbox[2] - hint_bbox[0]
+        hint_x = (panel_x1 + panel_x2 - hint_w) // 2
+        draw.text((hint_x, panel_y2 - 35), hint,
+                  font=self._fonts["mono"],
+                  fill=config.COLORS["text_dim"])
 
     # === Pygame Integration ===
 
