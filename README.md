@@ -200,7 +200,7 @@ journalctl --user -u openclaw-cyberdeck.service -n 50
 echo $DISPLAY  # Should show :0
 
 # Verify virtual environment exists
-ls -la /home/klair/Projects/OpenClaw-CyberDeck/.venv/bin/python
+ls -la /home/klair/Projects/cyberdeck/.venv/bin/python
 ```
 
 **Service starts but display is black:**
