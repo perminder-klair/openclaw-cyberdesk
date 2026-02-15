@@ -360,7 +360,7 @@ class DSIDisplay:
                                       fill=platform_fill, outline=platform_border)
 
         with self.lock:
-            self.molty.render(image, (molty_x, molty_y))
+            self.molty.render(image, (molty_x, molty_y), draw=draw)
             state_label = self.molty.get_state_label()
             state_color = self.molty.get_state_color()
 
