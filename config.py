@@ -7,8 +7,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-# Load .env from parent directory (shared with Next.js dashboard)
-_env_path = Path(__file__).parent.parent / '.env'
+# Load .env from dashboard directory (shared with Next.js dashboard)
+_env_path = Path('/home/klair/Projects/dashboard/.env')
 load_dotenv(_env_path)
 
 # ============ Server ============

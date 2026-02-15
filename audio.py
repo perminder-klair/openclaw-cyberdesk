@@ -256,11 +256,11 @@ class AudioController:
     def cancel_listening(self):
         """Cancel current listening/processing operation"""
         with self._state_lock:
-            if self.state in ('listening', 'processing'):
+            if self.state != 'idle':
+                logger.info("Listening cancelled (was '%s')", self.state)
                 self.cancel_event.set()
                 self.state = 'idle'
                 self.last_transcript = None
-                logger.info("Listening cancelled")
 
     def stop_recording(self):
         """Stop recording but proceed to transcription (for notes mode)"""
@@ -680,7 +680,10 @@ class AudioController:
         """Start listening for a voice command (bypass wake word detection)."""
         with self._state_lock:
             if self.state != 'idle':
-                return {'error': 'Already processing', 'state': self.state}
+                logger.warning("Force-cancelling stale state '%s' for new listen", self.state)
+                self.cancel_event.set()
+                self.state = 'idle'
+                self.last_transcript = None
             self.recording_mode = mode
 
         logger.info("Starting listening in %s mode", mode)
