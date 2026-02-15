@@ -21,49 +21,49 @@ class MoltyState(Enum):
     THINKING = "thinking"
 
 
-# State labels and colors
+# State labels and colors (softened glassmorphism palette)
 STATE_INFO = {
     MoltyState.IDLE: {
         "label": "Ready",
-        "color": COLORS["neon_cyan"],
-        "body_color": COLORS["neon_cyan"],
-        "claw_color": COLORS["hot_pink"],
-        "eye_color": COLORS["electric_purple"],
+        "color": (70, 210, 230),
+        "body_color": (70, 210, 230),
+        "claw_color": (230, 60, 120),
+        "eye_color": (160, 80, 220),
     },
     MoltyState.LISTENING: {
         "label": "Listening...",
-        "color": COLORS["electric_purple"],
-        "body_color": COLORS["electric_purple"],
-        "claw_color": COLORS["neon_cyan"],
-        "eye_color": COLORS["hot_pink"],
+        "color": (160, 80, 220),
+        "body_color": (160, 80, 220),
+        "claw_color": (70, 210, 230),
+        "eye_color": (230, 60, 120),
     },
     MoltyState.WORKING: {
         "label": "Working...",
-        "color": COLORS["amber"],
-        "body_color": COLORS["amber"],
-        "claw_color": COLORS["hot_pink"],
-        "eye_color": COLORS["neon_cyan"],
+        "color": (235, 160, 40),
+        "body_color": (235, 160, 40),
+        "claw_color": (230, 60, 120),
+        "eye_color": (70, 210, 230),
     },
     MoltyState.SUCCESS: {
         "label": "Done!",
-        "color": COLORS["neon_green"],
-        "body_color": COLORS["neon_green"],
-        "claw_color": COLORS["neon_cyan"],
-        "eye_color": COLORS["hot_pink"],
+        "color": (60, 220, 120),
+        "body_color": (60, 220, 120),
+        "claw_color": (70, 210, 230),
+        "eye_color": (230, 60, 120),
     },
     MoltyState.ERROR: {
         "label": "Error!",
-        "color": COLORS["neon_red"],
-        "body_color": COLORS["neon_red"],
-        "claw_color": COLORS["amber"],
-        "eye_color": COLORS["electric_purple"],
+        "color": (220, 50, 70),
+        "body_color": (220, 50, 70),
+        "claw_color": (235, 160, 40),
+        "eye_color": (160, 80, 220),
     },
     MoltyState.THINKING: {
         "label": "Thinking...",
-        "color": COLORS["hot_pink"],
-        "body_color": COLORS["hot_pink"],
-        "claw_color": COLORS["neon_cyan"],
-        "eye_color": COLORS["electric_purple"],
+        "color": (230, 60, 120),
+        "body_color": (230, 60, 120),
+        "claw_color": (70, 210, 230),
+        "eye_color": (160, 80, 220),
     },
 }
 

@@ -25,20 +25,20 @@ class ActivityEntry:
             self.timestamp = datetime.now()
 
 
-# Type to color mapping
+# Type to color mapping (softened glassmorphism palette)
 TYPE_COLORS = {
-    "tool": COLORS["type_tool"],           # Cyan
-    "message": COLORS["type_message"],     # Hot pink
-    "status": COLORS["type_status"],       # Electric purple
-    "error": COLORS["type_error"],         # Neon red
-    "notification": COLORS["type_notification"],  # Amber
+    "tool": COLORS["accent_cyan"],
+    "message": COLORS["accent_pink"],
+    "status": COLORS["accent_purple"],
+    "error": COLORS["status_red"],
+    "notification": COLORS["status_amber"],
 }
 
-# Status to color mapping (for status indicator)
+# Status to color mapping
 STATUS_COLORS = {
-    "done": COLORS["neon_green"],
-    "running": COLORS["amber"],
-    "fail": COLORS["neon_red"],
+    "done": COLORS["status_green"],
+    "running": COLORS["status_amber"],
+    "fail": COLORS["status_red"],
 }
 
 

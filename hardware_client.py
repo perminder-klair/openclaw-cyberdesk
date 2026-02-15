@@ -49,7 +49,7 @@ class HardwareClient:
 
         # State tracking
         self._current_led = LEDState()
-        self._current_brightness = 255
+        self._current_brightness = 100
         self._presence_zone = PresenceZone.NEAR
         self._presence_running = False
         self._presence_thread: Optional[threading.Thread] = None
@@ -82,7 +82,12 @@ class HardwareClient:
             if response.status_code == 200:
                 return response.json() if response.content else {"status": "ok"}
             else:
-                print(f"[Hardware] Request failed: {response.status_code}")
+                # Parse JSON error responses (400, 409, etc.)
+                try:
+                    err = response.json()
+                    print(f"[Hardware] Request failed ({response.status_code}): {err.get('error', 'unknown')}")
+                except Exception:
+                    print(f"[Hardware] Request failed: {response.status_code}")
                 return None
 
         except requests.exceptions.ConnectionError:
@@ -155,14 +160,13 @@ class HardwareClient:
         Set display backlight brightness.
 
         Args:
-            level: Brightness level (0-255)
+            level: Brightness level (10-100)
         """
-        level = max(0, min(255, level))
+        level = max(10, min(100, level))
         with self._lock:
             self._current_brightness = level
 
-        brightness = round(level * 100 / 255)
-        self._request("POST", self.endpoints["brightness"], json={"brightness": brightness})
+        self._request("POST", self.endpoints["brightness"], json={"brightness": level})
 
     def get_brightness(self) -> int:
         """Get current brightness level."""
@@ -269,7 +273,7 @@ class HardwareClient:
         return True
 
     def get_voice_status(self) -> Optional[Dict[str, Any]]:
-        """Get current voice pipeline status. Returns {state, lastTranscript, ...}."""
+        """Get current voice pipeline status. Returns {state, last_transcript, ...}."""
         return self._request("GET", self.endpoints["voice_status"])
 
     def cancel_listening(self) -> bool:

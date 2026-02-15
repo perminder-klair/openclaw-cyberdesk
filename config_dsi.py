@@ -46,35 +46,14 @@ LED_STATES = {
 
 # Presence-based Backlight
 PRESENCE_BACKLIGHT = {
-    "near_brightness": 255,       # Full brightness - at the display
-    "medium_brightness": 200,     # Slightly dimmed - leaned back
-    "far_brightness": 80,         # Dim - stepped away
-    "away_brightness": 30,        # Very dim - not detected
+    "near_brightness": 100,      # Full brightness - at the display
+    "medium_brightness": 78,     # Slightly dimmed - leaned back
+    "far_brightness": 31,        # Dim - stepped away
+    "away_brightness": 12,       # Very dim - not detected
     "poll_interval": 1.0,         # seconds
 }
 
 # Unified Layout (1280x720) - No header, buttons in left panel
-# ┌──────────────────────────┬──────────────────────────────────────────────────────────┐
-# │                          │  ACTIVITY                                        14:32   │
-# │    +─── 130x130 ───+    │ ─────────────────────────────────────────────────────────│
-# │    │     MOLTY      │    │  [cyan] Checked inbox                          14:23    │
-# │    +────────────────+    │  [pink] Running backup                         14:22    │
-# │        "Ready"           │  [purple] Focus activated                      14:21    │
-# │                          │  [amber] Reminder                              14:20    │
-# │  +──────+ +──────+       │  [cyan] Status check                           14:19    │
-# │  | INBOX| | BRIEF|       │  [red] Error detected                          14:18    │
-# │  +──────+ +──────+       │  [cyan] System startup                         14:17    │
-# │  +──────+ +──────+       │                                                          │
-# │  | QUEUE| | FOCUS|       │                                                          │
-# │  +──────+ +──────+       │                                                          │
-# │  +──────+ +──────+       │                                                          │
-# │  |STATUS| |VOICE |       │                                                          │
-# │  +──────+ +──────+       │                                                          │
-# │  +──────+ +──────+       │                                                          │
-# │  | NEW  | |TASKS |       │                                                          │
-# │  +──────+ +──────+       │                                                          │
-# └──────────────────────────┴──────────────────────────────────────────────────────────┘
-
 LAYOUT = {
     # Overall structure
     "header_height": 0,
@@ -82,12 +61,13 @@ LAYOUT = {
 
     # Left panel (Molty + status + buttons)
     "molty_panel_width": 320,
-    "molty_sprite_size": (130, 130),
-    "molty_position_y": 8,   # Y offset from panel top
-    "state_label_offset_y": 148,  # Y offset from panel top for state label
+    "molty_sprite_size": (110, 110),
+    "molty_position_y": 8,
+    "state_label_offset_y": 128,
+
     # Button panel in left sidebar
-    "button_panel_y_offset": 195,  # Where buttons start in left panel
-    "button_panel_height": 336,
+    "button_panel_y_offset": 170,
+    "button_panel_height": 380,
 
     # Right panel (activity feed uses full height)
     "activity_feed_height_ratio": 1.0,
@@ -96,40 +76,103 @@ LAYOUT = {
     "activity_header_height": 45,
     "activity_entry_height": 105,
     "activity_max_visible": 6,
+    "activity_entry_gap": 6,
 
     # Button grid (2x4 in left panel)
     "button_cols": 2,
     "button_rows": 4,
-    "button_gap": 16,
-    "button_padding": 24,
+    "button_gap": 10,
+    "button_padding": 16,
+
+    # Glass styling
+    "button_radius": 10,
+    "card_radius": 10,
+    "panel_radius": 12,
 }
 
-# Font sizes (scaled for 7" 1280x720 display)
+# Font paths - Custom fonts with fallbacks
 FONTS = {
+    # Custom fonts
+    "rajdhani_bold": "assets/fonts/Rajdhani-Bold.ttf",
+    "rajdhani_semibold": "assets/fonts/Rajdhani-SemiBold.ttf",
+    "inter": "assets/fonts/Inter-Regular.ttf",
+    "jetbrains_mono": "assets/fonts/JetBrainsMono-Regular.ttf",
+
+    # Fallback system fonts
     "default_path": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "bold_path": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "mono_path": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+
+    # Size hierarchy
+    "size_header_large": 38,
+    "size_header": 30,
+    "size_button": 26,
+    "size_body": 22,
+    "size_body_small": 18,
+    "size_mono": 20,
+    "size_mono_small": 16,
+
+    # Legacy sizes (backward compat)
     "size_small": 21,
     "size_medium": 27,
     "size_large": 36,
     "size_title": 42,
-    "size_header": 30,
 }
 
-# Color Scheme (same as original)
+# Color Scheme — Glassmorphism Dark
 COLORS = {
-    "background": (10, 10, 15),
-    "panel_bg": (15, 15, 25),
-    "panel_border": (30, 30, 45),
-    "neon_cyan": (0, 255, 255),
-    "hot_pink": (255, 0, 102),
-    "electric_purple": (191, 0, 255),
-    "amber": (255, 170, 0),
-    "neon_green": (0, 255, 102),
-    "neon_red": (255, 0, 51),
-    "text_primary": (238, 238, 255),
-    "text_dim": (68, 119, 119),
-    "text_secondary": (100, 150, 150),
+    # Backgrounds
+    "background": (14, 12, 22),
+    "background_top": (14, 12, 22),
+    "background_bottom": (10, 8, 18),
+    "panel_bg": (18, 16, 28),
+    "panel_border": (35, 32, 50),
+
+    # Accent colors (softened neons)
+    "accent_cyan": (70, 210, 230),
+    "accent_pink": (230, 60, 120),
+    "accent_purple": (160, 80, 220),
+
+    # Status colors (softened)
+    "status_amber": (235, 160, 40),
+    "status_green": (60, 220, 120),
+    "status_red": (220, 50, 70),
+
+    # Text colors
+    "text_primary": (230, 232, 245),
+    "text_secondary": (140, 150, 175),
+    "text_dim": (75, 85, 110),
+
+    # Glass RGBA tints (used with alpha compositing)
+    "glass_panel": (20, 18, 35, 160),
+    "glass_button": (25, 22, 40, 180),
+    "glass_card": (22, 20, 38, 160),
+    "glass_border": (80, 75, 120, 80),
+    "glass_border_glow": (80, 75, 120, 40),
+    "glass_highlight": (255, 255, 255, 20),
+
+    # Backward-compat aliases (old names → new values)
+    "neon_cyan": (70, 210, 230),
+    "hot_pink": (230, 60, 120),
+    "electric_purple": (160, 80, 220),
+    "amber": (235, 160, 40),
+    "neon_green": (60, 220, 120),
+    "neon_red": (220, 50, 70),
+
+    # Activity type colors (use accent colors)
+    "type_tool": (70, 210, 230),
+    "type_message": (230, 60, 120),
+    "type_status": (160, 80, 220),
+    "type_error": (220, 50, 70),
+    "type_notification": (235, 160, 40),
+
+    # Button states
+    "button_normal": (25, 22, 40),
+    "button_border": (70, 210, 230),
+    "button_pressed": (230, 60, 120),
+    "button_running": (235, 160, 40),
+    "button_success": (60, 220, 120),
+    "button_error": (220, 50, 70),
 }
 
 # Button commands (2x4 grid in left panel)

@@ -319,7 +319,7 @@ class DSICommandCenter:
                 return
 
             state = status.get("state", "idle")
-            transcript = status.get("lastTranscript")
+            transcript = status.get("last_transcript")
             # Track when we've seen the hardware actually start recording
             if state in ("listening", "processing"):
                 seen_active = True
@@ -794,7 +794,7 @@ Hardware Integration:
     /voice/speak  - TTS (text, priority)
 
   Start hardware server:
-    cd ~/Projects/dashboard/hardware && python server.py &
+    cd ~/Projects/hardware && python server.py &
 """
     )
     parser.add_argument(

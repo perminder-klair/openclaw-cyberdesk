@@ -6,51 +6,65 @@ Colors, fonts, and visual effects (glow, scanlines, glitch).
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import random
 
-# Cyberpunk color palette (RGB tuples)
+# Cyberpunk color palette — softened glassmorphism dark (RGB tuples)
 COLORS = {
-    "background": (10, 10, 15),         # #0a0a0f - Deep dark blue-black
-    "panel_bg": (15, 15, 25),           # #0f0f19 - Slightly lighter panel
-    "panel_border": (30, 30, 45),       # Border for panels
+    "background": (14, 12, 22),
+    "panel_bg": (18, 16, 28),
+    "panel_border": (35, 32, 50),
 
-    # Primary neon colors
-    "neon_cyan": (0, 255, 255),         # #00ffff - Primary accent
-    "hot_pink": (255, 0, 102),          # #ff0066 - Secondary accent
-    "electric_purple": (191, 0, 255),   # #bf00ff - Tertiary accent
+    # Primary accent colors (softened neons)
+    "neon_cyan": (70, 210, 230),
+    "hot_pink": (230, 60, 120),
+    "electric_purple": (160, 80, 220),
 
-    # Status colors
-    "amber": (255, 170, 0),             # #ffaa00 - Warning/running
-    "neon_green": (0, 255, 102),        # #00ff66 - Success
-    "neon_red": (255, 0, 51),           # #ff0033 - Error
+    # Alias names
+    "accent_cyan": (70, 210, 230),
+    "accent_pink": (230, 60, 120),
+    "accent_purple": (160, 80, 220),
+
+    # Status colors (softened)
+    "amber": (235, 160, 40),
+    "neon_green": (60, 220, 120),
+    "neon_red": (220, 50, 70),
+    "status_amber": (235, 160, 40),
+    "status_green": (60, 220, 120),
+    "status_red": (220, 50, 70),
 
     # Text colors
-    "text_primary": (238, 238, 255),    # #eeeeff - Main text
-    "text_dim": (68, 119, 119),         # #447777 - Dimmed text
-    "text_secondary": (100, 150, 150),  # Secondary text
+    "text_primary": (230, 232, 245),
+    "text_secondary": (140, 150, 175),
+    "text_dim": (75, 85, 110),
 
     # Activity type colors
-    "type_tool": (0, 255, 255),         # Cyan for tools
-    "type_message": (255, 0, 102),      # Hot pink for messages
-    "type_status": (191, 0, 255),       # Purple for status
-    "type_error": (255, 0, 51),         # Red for errors
-    "type_notification": (255, 170, 0), # Amber for notifications
+    "type_tool": (70, 210, 230),
+    "type_message": (230, 60, 120),
+    "type_status": (160, 80, 220),
+    "type_error": (220, 50, 70),
+    "type_notification": (235, 160, 40),
 
     # Button states
-    "button_normal": (20, 20, 30),      # Default button bg
-    "button_border": (0, 255, 255),     # Cyan border
-    "button_pressed": (255, 0, 102),    # Hot pink when pressed
-    "button_running": (255, 170, 0),    # Amber when running
-    "button_success": (0, 255, 102),    # Green flash on success
-    "button_error": (255, 0, 51),       # Red flash on error
+    "button_normal": (25, 22, 40),
+    "button_border": (70, 210, 230),
+    "button_pressed": (230, 60, 120),
+    "button_running": (235, 160, 40),
+    "button_success": (60, 220, 120),
+    "button_error": (220, 50, 70),
 }
 
 # Dimmed versions of colors (for glow outer layers)
 COLORS_DIM = {
-    "neon_cyan": (0, 128, 128),
-    "hot_pink": (128, 0, 51),
-    "electric_purple": (96, 0, 128),
-    "amber": (128, 85, 0),
-    "neon_green": (0, 128, 51),
-    "neon_red": (128, 0, 26),
+    "neon_cyan": (35, 105, 115),
+    "hot_pink": (115, 30, 60),
+    "electric_purple": (80, 40, 110),
+    "amber": (118, 80, 20),
+    "neon_green": (30, 110, 60),
+    "neon_red": (110, 25, 35),
+    "accent_cyan": (35, 105, 115),
+    "accent_pink": (115, 30, 60),
+    "accent_purple": (80, 40, 110),
+    "status_amber": (118, 80, 20),
+    "status_green": (30, 110, 60),
+    "status_red": (110, 25, 35),
 }
 
 
