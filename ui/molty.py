@@ -53,6 +53,28 @@ STATE_INFO = {
 }
 
 
+# Proximity modulation profiles — multipliers applied to blink/idle intervals
+PROXIMITY_PROFILES = {
+    "near":   {"blink_mult": 1.0, "idle_mult": 1.0, "mood": None,       "close": False},
+    "medium": {"blink_mult": 1.5, "idle_mult": 1.5, "mood": None,       "close": False},
+    "far":    {"blink_mult": 2.5, "idle_mult": 3.0, "mood": MOOD_TIRED, "close": False},
+    "away":   {"blink_mult": 1.0, "idle_mult": 1.0, "mood": None,       "close": True},
+}
+
+# Base blink/idle settings per state (canonical values from _apply_state)
+_BASE_STATE_SETTINGS = {
+    MoltyState.IDLE:      {"blink": (True, 2, 3), "idle": (True, 2, 2)},
+    MoltyState.LISTENING: {"blink": (True, 3, 2), "idle": (False,)},
+    MoltyState.WORKING:   {"blink": (True, 2, 2), "idle": (True, 0, 1)},
+    MoltyState.SUCCESS:   {"blink": (True, 3, 2), "idle": (False,)},
+    MoltyState.ERROR:     {"blink": (False,),      "idle": (False,)},
+    MoltyState.THINKING:  {"blink": (True, 3, 2), "idle": (True, 2, 2)},
+}
+
+# Transient states that should NOT be overridden by proximity
+_TRANSIENT_STATES = {MoltyState.WORKING, MoltyState.SUCCESS, MoltyState.ERROR}
+
+
 class Molty:
     """
     Animated robot eyes avatar with state-based expressions.
@@ -65,6 +87,10 @@ class Molty:
         if sprite_size:
             self.SPRITE_SIZE = sprite_size
         self.state = MoltyState.IDLE
+
+        self._proximity_zone = "near"
+        self._proximity_zone_prev = "near"
+        self._wake_pending = False
 
         w, h = self.SPRITE_SIZE
         self.eyes = RoboEyes(canvas_width=w, canvas_height=h)
@@ -129,6 +155,75 @@ class Molty:
         if state != self.state:
             self.state = state
             self._apply_state()
+            self._apply_proximity_modulation()
+
+    def set_proximity_zone(self, zone_str):
+        """Update proximity zone and modulate eye behavior accordingly."""
+        if zone_str == self._proximity_zone:
+            return
+        self._proximity_zone_prev = self._proximity_zone
+        self._proximity_zone = zone_str
+
+        # Detect approaching transition (far/away → near/medium)
+        approaching = (
+            self._proximity_zone_prev in ("far", "away")
+            and self._proximity_zone in ("near", "medium")
+        )
+        if approaching:
+            self._wake_pending = True
+
+        self._apply_proximity_modulation()
+
+    def _apply_proximity_modulation(self):
+        """Modulate blink/idle based on proximity zone. Skip for transient states."""
+        if self.state in _TRANSIENT_STATES:
+            return
+
+        profile = PROXIMITY_PROFILES.get(self._proximity_zone)
+        if not profile:
+            return
+
+        # Handle wake-up reaction
+        if self._wake_pending:
+            self._wake_pending = False
+            self._do_wake_reaction()
+            return
+
+        # Close eyes when away
+        if profile["close"]:
+            self.eyes.set_autoblinker(False)
+            self.eyes.set_idle_mode(False)
+            self.eyes.close()
+            return
+
+        # Override mood for far zone
+        if profile["mood"] is not None:
+            self.eyes.set_mood(profile["mood"])
+
+        # Apply multipliers to base blink/idle settings
+        base = _BASE_STATE_SETTINGS.get(self.state)
+        if not base:
+            return
+
+        blink = base["blink"]
+        if blink[0]:  # autoblinker active
+            interval = int(blink[1] * profile["blink_mult"])
+            variation = blink[2]
+            self.eyes.set_autoblinker(True, interval, variation)
+
+        idle = base["idle"]
+        if len(idle) > 1 and idle[0]:  # idle mode active with params
+            interval = int(idle[1] * profile["idle_mult"])
+            variation = idle[2]
+            self.eyes.set_idle_mode(True, interval, variation)
+
+    def _do_wake_reaction(self):
+        """Eyes open with brief upward glance when user approaches."""
+        self.eyes.open()
+        self.eyes.set_mood(MOOD_DEFAULT)
+        self.eyes.set_position(POS_N)
+        self.eyes.set_autoblinker(True, 2, 3)
+        self.eyes.set_idle_mode(True, 2, 2)
 
     def get_state_label(self):
         """Get the display label for current state."""

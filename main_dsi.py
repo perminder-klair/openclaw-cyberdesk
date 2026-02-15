@@ -578,10 +578,7 @@ class DSICommandCenter:
         """Configure presence change handler."""
 
         def on_presence_change(zone: PresenceZone):
-            if zone == PresenceZone.AWAY:
-                print("[Main] User away - dimming display")
-            elif zone == PresenceZone.NEAR:
-                print("[Main] User present - full brightness")
+            self.display.set_molty_proximity(zone.value)
 
         self.hardware.set_presence_callback(on_presence_change)
 

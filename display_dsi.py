@@ -88,6 +88,10 @@ class DSIDisplay:
         with self.lock:
             self.molty.set_state(state)
 
+    def set_molty_proximity(self, zone_str: str):
+        with self.lock:
+            self.molty.set_proximity_zone(zone_str)
+
     def get_molty_state(self) -> MoltyState:
         return self.molty.state
 
