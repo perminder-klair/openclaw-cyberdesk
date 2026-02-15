@@ -173,7 +173,7 @@ class DSICommandCenter:
                 if entry and entry.detail:
                     self.display.show_overlay(entry)
 
-            self._set_molty_state_with_timer(MoltyState.SUCCESS, 2.0)
+            self.display.set_molty_state(MoltyState.SUCCESS)
             self.hardware.set_led_state("success")
 
             if self._active_button_id:
@@ -184,14 +184,23 @@ class DSICommandCenter:
             # Wake screen on response
             self.hardware.set_brightness(config.PRESENCE_BACKLIGHT["near_brightness"])
 
-            # Speak response aloud via TTS
+            # Speak response aloud via TTS, then return to idle
             if content:
                 tts_text = clean_response_text(truncate_at_sentence(content, 500))
-                threading.Thread(
-                    target=self.hardware.speak,
-                    args=(tts_text,),
-                    daemon=True
-                ).start()
+
+                def speak_then_idle():
+                    self.hardware.speak(tts_text)
+                    # Poll until TTS finishes (voice state returns to idle)
+                    for _ in range(120):  # Up to ~60 seconds
+                        time.sleep(0.5)
+                        status = self.hardware.get_voice_status()
+                        if status is None or status.get("state", "idle") == "idle":
+                            break
+                    self._set_molty_state_with_timer(MoltyState.SUCCESS, 2.0)
+
+                threading.Thread(target=speak_then_idle, daemon=True).start()
+            else:
+                self._set_molty_state_with_timer(MoltyState.SUCCESS, 2.0)
 
         self.bridge.set_callbacks(
             on_message_chunk=on_message_chunk,
