@@ -687,11 +687,98 @@ class AudioController:
         }
 
     def start_listening(self, mode: str = 'assistant') -> dict:
-        """Start listening for a voice command (currently disabled)."""
+        """Start listening for a voice command via temporary audio stream."""
         if MOCK_MODE:
             return self.trigger_mock_wake('test command')
 
-        return {'error': 'Listen loop is disabled to prevent audio conflicts'}
+        with self._state_lock:
+            if self.state != 'idle':
+                return {'error': f'Already busy (state={self.state})'}
+            if self.tts_playing:
+                return {'error': 'TTS is currently playing'}
+            self.recording_mode = mode
+            self.cancel_event.clear()
+            self.stop_recording_event.clear()
+
+        t = threading.Thread(target=self._manual_listen, daemon=True)
+        t.start()
+        return {'status': 'ok'}
+
+    def _manual_listen(self):
+        """Background thread: open a temporary mic stream, record, transcribe."""
+        self._set_state('listening')
+        chunk_size = int(SAMPLE_RATE * CHUNK_DURATION)
+
+        try:
+            with sd.InputStream(
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype='float32',
+                blocksize=chunk_size,
+                device=AUDIO_DEVICE
+            ) as stream:
+                # Discard ~200ms to let mic settle
+                discard_chunks = max(1, int(0.2 / CHUNK_DURATION))
+                for _ in range(discard_chunks):
+                    stream.read(chunk_size)
+
+                with self._state_lock:
+                    mode = self.recording_mode
+
+                if mode == 'notes':
+                    audio_data = self._record_until_stopped(stream)
+                else:
+                    audio_data = self._record_until_silence(stream)
+
+            if audio_data is None:
+                logger.debug("Manual listen: no audio recorded")
+                self._set_state('idle')
+                return
+
+            duration = len(audio_data) / SAMPLE_RATE
+            logger.info("Manual listen: recorded %.2fs of audio", duration)
+
+            if duration < 0.5:
+                logger.debug("Manual listen: recording too short, ignoring")
+                self._set_state('idle')
+                return
+
+            if self.cancel_event.is_set():
+                self.cancel_event.clear()
+                logger.info("Manual listen: cancelled before transcription")
+                self._set_state('idle')
+                return
+
+            self._set_state('processing')
+            logger.info("Transcribing with %s...", 'Whisper' if WHISPER_URL else 'ElevenLabs')
+            transcript = self._transcribe(audio_data)
+
+            if transcript:
+                transcript = self._clean_transcript(transcript)
+                if self._is_valid_transcript(transcript):
+                    with self._state_lock:
+                        self.last_transcript = transcript
+                    logger.info("Manual listen transcript: '%s'", transcript)
+                else:
+                    logger.debug("Filtered noise transcript: '%s'", transcript)
+                    with self._state_lock:
+                        self.last_transcript = None
+            else:
+                logger.debug("No transcript returned")
+                with self._state_lock:
+                    self.last_transcript = None
+
+        except Exception as e:
+            with self._state_lock:
+                self.error = str(e)
+            logger.error("Manual listen error: %s", e, exc_info=True)
+
+        finally:
+            with self._state_lock:
+                self.recording_mode = 'assistant'
+            self._set_state('idle')
+            with self._state_lock:
+                self.last_command_time = time.time()
 
     def get_tts_volume(self) -> int:
         """Get current TTS volume percentage"""
