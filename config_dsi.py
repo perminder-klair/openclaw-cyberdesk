@@ -76,8 +76,8 @@ LAYOUT = {
 
     # Activity feed
     "activity_header_height": 45,
-    "activity_entry_height": 105,
-    "activity_max_visible": 6,
+    "activity_entry_height": 130,
+    "activity_max_visible": 5,
     "activity_entry_gap": 6,
 
     # Button grid (2x4 in left panel)

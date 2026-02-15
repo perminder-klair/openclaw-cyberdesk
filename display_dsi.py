@@ -189,9 +189,9 @@ class DSIDisplay:
         """Create and register all right-panel views."""
         self.view_manager = ViewManager()
         self.view_manager.add_view(ActivityView(self.glass, self._fonts, self))
+        self.view_manager.add_view(CronView(self.glass, self._fonts, bridge))
         self.view_manager.add_view(HealthView(self.glass, self._fonts, bridge))
         self.view_manager.add_view(QueueView(self.glass, self._fonts, bridge))
-        self.view_manager.add_view(CronView(self.glass, self._fonts, bridge))
 
     # === Approval Modal ===
 
@@ -575,16 +575,17 @@ class DSIDisplay:
         draw.text((x + width - 34 - time_w, y + 8), time_str,
                   font=time_font, fill=config.COLORS["text_dim"])
 
-        # Row 2+3: Detail text (body font, primary color)
+        # Row 2-6: Detail text (body_small font, up to 5 lines)
         if entry.detail:
-            body_font = self._fonts["body"]
+            detail_font = self._fonts["body_small"]
             cleaned = clean_response_text(entry.detail)
-            wrapped = self._word_wrap(cleaned, body_font, text_w)
-            for i, line in enumerate(wrapped[:2]):
-                if i == 1 and len(wrapped) > 2:
-                    line = self._truncate_text(line, body_font, text_w)
-                draw.text((text_x, y + 30 + i * 28), line,
-                          font=body_font,
+            wrapped = self._word_wrap(cleaned, detail_font, text_w)
+            max_lines = 5
+            for i, line in enumerate(wrapped[:max_lines]):
+                if i == max_lines - 1 and len(wrapped) > max_lines:
+                    line = self._truncate_text(line, detail_font, text_w)
+                draw.text((text_x, y + 30 + i * 20), line,
+                          font=detail_font,
                           fill=config.COLORS["text_primary"])
 
     def _draw_streaming_entry(self, draw: ImageDraw.Draw, x: int, y: int,

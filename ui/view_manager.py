@@ -9,9 +9,9 @@ from ui.view_base import RightPanelView
 
 # View index constants
 ACTIVITY = 0
-HEALTH = 1
-QUEUE = 2
-CRON = 3
+CRON = 1
+HEALTH = 2
+QUEUE = 3
 
 
 class ViewManager:

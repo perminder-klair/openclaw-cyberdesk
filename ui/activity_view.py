@@ -26,21 +26,11 @@ class ActivityView(RightPanelView):
         """Render the activity feed (delegates to display methods)."""
         layout = config.LAYOUT
 
-        # Header
-        header_h = layout["activity_header_height"]
-        header_font = self.fonts["header"]
-        draw.text((x + 18, y + 8), "ACTIVITY", font=header_font,
-                  fill=config.COLORS["accent_cyan"])
-
-        divider_color = tuple(c // 4 for c in config.COLORS["accent_cyan"][:3])
-        draw.line([(x + 15, y + header_h - 1), (x + width - 15, y + header_h - 1)],
-                  fill=divider_color, width=1)
-
-        # Entries area
+        # Entries area (no header — view indicator bar has the title)
         entry_h = layout["activity_entry_height"]
         entry_gap = layout.get("activity_entry_gap", 6)
-        entries_y = y + header_h + 4
-        entries_area_h = height - header_h - 25
+        entries_y = y + 4
+        entries_area_h = height - 10
 
         with self.display.lock:
             entries = list(self.display.activity_feed.entries)
