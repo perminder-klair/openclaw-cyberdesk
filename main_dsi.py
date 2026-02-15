@@ -35,6 +35,7 @@ from openclaw_bridge import OpenClawBridge
 from openclaw_config import OpenClawConfig
 from websocket_client import ConnectionState
 from ui.molty import MoltyState
+from ui.text_utils import clean_response_text
 
 
 class DSICommandCenter:
@@ -172,7 +173,7 @@ class DSICommandCenter:
 
             # Speak response aloud via TTS
             if content:
-                tts_text = content[:500]
+                tts_text = clean_response_text(content[:500])
                 threading.Thread(
                     target=self.hardware.speak,
                     args=(tts_text,),
@@ -297,8 +298,6 @@ class DSICommandCenter:
 
             state = status.get("state", "idle")
             transcript = status.get("lastTranscript")
-            print(f"[Main] Voice poll: state={state}, transcript={transcript}, seen_active={seen_active}, raw={status}")
-
             # Track when we've seen the hardware actually start recording
             if state in ("listening", "processing"):
                 seen_active = True
