@@ -62,10 +62,18 @@ class TouchHandler:
         self._last_tap_time = 0
         self._last_drag_pos: Optional[Tuple[int, int]] = None
 
+        # Swipe detection
+        self.swipe_threshold_px = 80
+        self._gesture_locked = False
+        self._gesture_is_swipe = False
+        self._total_dx = 0
+        self._total_dy = 0
+
         # Callbacks
         self.on_tap: Optional[Callable[[int, int], None]] = None
         self.on_long_press: Optional[Callable[[int, int], None]] = None
         self.on_drag: Optional[Callable[[int, int, int, int], None]] = None
+        self.on_swipe: Optional[Callable[[int, int, str], None]] = None  # (start_x, start_y, "left"|"right")
 
     def process_event(self, event) -> bool:
         """
@@ -94,6 +102,9 @@ class TouchHandler:
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 return self._handle_mouse_up(event)
+        elif event.type == pygame.MOUSEMOTION:
+            if self._touch_start is not None and self._state == TouchState.TOUCHING:
+                return self._handle_mouse_motion(event)
 
         return False
 
@@ -126,8 +137,13 @@ class TouchHandler:
             self._touch_start.x, self._touch_start.y, x, y
         )
 
-        # Determine gesture type
-        if distance <= self.tap_threshold_px:
+        # Check for horizontal swipe before other gestures
+        if self._gesture_locked and self._gesture_is_swipe and abs(self._total_dx) >= self.swipe_threshold_px:
+            direction = "left" if self._total_dx < 0 else "right"
+            if self.on_swipe:
+                self.on_swipe(self._touch_start.x, self._touch_start.y, direction)
+        elif distance <= self.tap_threshold_px:
+            # Determine gesture type
             if touch_duration_ms >= self.long_press_ms:
                 # Long press
                 if self.on_long_press:
@@ -143,6 +159,10 @@ class TouchHandler:
         # Reset state
         self._touch_start = None
         self._last_drag_pos = None
+        self._gesture_locked = False
+        self._gesture_is_swipe = False
+        self._total_dx = 0
+        self._total_dy = 0
         self._state = TouchState.IDLE
 
         return True
@@ -169,8 +189,26 @@ class TouchHandler:
             dy = y - self._last_drag_pos[1]
             self._last_drag_pos = (x, y)
 
-            if self.on_drag:
-                self.on_drag(x, y, dx, dy)
+            # Accumulate total deltas
+            self._total_dx += dx
+            self._total_dy += dy
+
+            # Lock axis on first significant motion
+            if not self._gesture_locked:
+                total_abs_dx = abs(self._total_dx)
+                total_abs_dy = abs(self._total_dy)
+                if total_abs_dx > self.tap_threshold_px or total_abs_dy > self.tap_threshold_px:
+                    self._gesture_locked = True
+                    self._gesture_is_swipe = total_abs_dx > total_abs_dy
+
+            # Only fire drag callback for vertical gestures (not horizontal swipes)
+            if self._gesture_locked and not self._gesture_is_swipe:
+                if self.on_drag:
+                    self.on_drag(x, y, dx, dy)
+            elif not self._gesture_locked:
+                # Not locked yet, pass through drags
+                if self.on_drag:
+                    self.on_drag(x, y, dx, dy)
 
         return True
 
@@ -185,6 +223,42 @@ class TouchHandler:
         self._state = TouchState.TOUCHING
         return True
 
+    def _handle_mouse_motion(self, event) -> bool:
+        """Handle mouse motion (for desktop testing, mirrors finger motion)."""
+        if self._touch_start is None:
+            return False
+
+        x, y = event.pos
+        distance = self._calculate_distance(
+            self._touch_start.x, self._touch_start.y, x, y
+        )
+
+        if distance > self.tap_threshold_px:
+            if self._last_drag_pos is None:
+                self._last_drag_pos = (self._touch_start.x, self._touch_start.y)
+            dx = x - self._last_drag_pos[0]
+            dy = y - self._last_drag_pos[1]
+            self._last_drag_pos = (x, y)
+
+            self._total_dx += dx
+            self._total_dy += dy
+
+            if not self._gesture_locked:
+                total_abs_dx = abs(self._total_dx)
+                total_abs_dy = abs(self._total_dy)
+                if total_abs_dx > self.tap_threshold_px or total_abs_dy > self.tap_threshold_px:
+                    self._gesture_locked = True
+                    self._gesture_is_swipe = total_abs_dx > total_abs_dy
+
+            if self._gesture_locked and not self._gesture_is_swipe:
+                if self.on_drag:
+                    self.on_drag(x, y, dx, dy)
+            elif not self._gesture_locked:
+                if self.on_drag:
+                    self.on_drag(x, y, dx, dy)
+
+        return True
+
     def _handle_mouse_up(self, event) -> bool:
         """Handle mouse button up (for desktop testing)."""
         if self._touch_start is None:
@@ -196,7 +270,12 @@ class TouchHandler:
             self._touch_start.x, self._touch_start.y, x, y
         )
 
-        if distance <= self.tap_threshold_px:
+        # Check for horizontal swipe before other gestures
+        if self._gesture_locked and self._gesture_is_swipe and abs(self._total_dx) >= self.swipe_threshold_px:
+            direction = "left" if self._total_dx < 0 else "right"
+            if self.on_swipe:
+                self.on_swipe(self._touch_start.x, self._touch_start.y, direction)
+        elif distance <= self.tap_threshold_px:
             if touch_duration_ms >= self.long_press_ms:
                 if self.on_long_press:
                     self.on_long_press(self._touch_start.x, self._touch_start.y)
@@ -209,6 +288,10 @@ class TouchHandler:
 
         self._touch_start = None
         self._last_drag_pos = None
+        self._gesture_locked = False
+        self._gesture_is_swipe = False
+        self._total_dx = 0
+        self._total_dy = 0
         self._state = TouchState.IDLE
         return True
 

@@ -35,6 +35,7 @@ from openclaw_bridge import OpenClawBridge
 from openclaw_config import OpenClawConfig
 from websocket_client import ConnectionState
 from ui.molty import MoltyState
+from ui.view_manager import ACTIVITY, HEALTH, QUEUE, CRON
 from ui.text_utils import clean_response_text, truncate_at_sentence
 
 
@@ -202,12 +203,19 @@ class DSICommandCenter:
             else:
                 self._set_molty_state_with_timer(MoltyState.SUCCESS, 2.0)
 
+        def on_approval_requested(approval):
+            """Handle tool approval request."""
+            self.display.show_approval(approval)
+            self.hardware.set_led_state("error")  # Red to draw attention
+            self.hardware.set_brightness(config.PRESENCE_BACKLIGHT["near_brightness"])
+
         self.bridge.set_callbacks(
             on_message_chunk=on_message_chunk,
             on_message_complete=on_message_complete,
             on_notification=on_notification,
             on_status_change=on_status_update,
             on_connection_change=on_connection_change,
+            on_approval_requested=on_approval_requested,
         )
 
     def _set_molty_state_with_timer(self, state: MoltyState, delay_seconds: float):
@@ -397,16 +405,40 @@ class DSICommandCenter:
             """Handle tap events."""
             print(f"[Main] Tap at ({x}, {y})")
 
+            # Approval modal takes priority
+            if self.display.is_approval_visible():
+                action = self.display.find_approval_button(x, y)
+                if action == "approve":
+                    approval = self.display.approval_modal.current_approval
+                    if approval:
+                        self.bridge.send_approval_response(approval["id"], True)
+                    self.display.dismiss_approval()
+                    self.hardware.restore_ambient_led()
+                elif action == "deny":
+                    approval = self.display.approval_modal.current_approval
+                    if approval:
+                        self.bridge.send_approval_response(approval["id"], False)
+                    self.display.dismiss_approval()
+                    self.hardware.restore_ambient_led()
+                else:
+                    # Tap outside buttons dismisses (deny)
+                    approval = self.display.approval_modal.current_approval
+                    if approval:
+                        self.bridge.send_approval_response(approval["id"], False)
+                    self.display.dismiss_approval()
+                    self.hardware.restore_ambient_led()
+                return
+
             # Dismiss overlay if visible (consumes tap)
             if self.display.is_overlay_visible():
                 self.display.dismiss_overlay()
                 return
 
-            # Check if tap hits an activity entry with detail text
-            entry = self.display.find_activity_entry(x, y)
-            if entry and entry.detail:
-                self.display.show_overlay(entry)
-                return
+            # Check if tap hits an activity entry (only on activity view)
+            if self.display.view_manager.active_index == ACTIVITY:
+                active_view = self.display.view_manager.active_view
+                if active_view and active_view.on_tap(x, y):
+                    return
 
             button = self.display.find_button(x, y)
 
@@ -421,6 +453,19 @@ class DSICommandCenter:
                 # New session button handling
                 if button["id"] == "new_session":
                     self._handle_new_session_tap(button)
+                    return
+
+                # View switching commands
+                if button.get("command") == "__view_queue__":
+                    self.display.view_manager.switch_to(QUEUE)
+                    self.bridge.request_runs_list()
+                    self.display.set_button_state(button["id"], "pressed")
+                    self._reset_button_after_delay(button["id"], 0.5)
+                    return
+                if button.get("command") == "__view_health__":
+                    self.display.view_manager.switch_to(HEALTH)
+                    self.display.set_button_state(button["id"], "pressed")
+                    self._reset_button_after_delay(button["id"], 0.5)
                     return
 
                 # Visual feedback
@@ -555,24 +600,43 @@ class DSICommandCenter:
 
         def on_drag(x, y, dx, dy):
             """Handle drag events for scrolling."""
+            if self.display.is_approval_visible():
+                return  # No drag in approval modal
+
             if self.display.is_overlay_visible():
                 # Scroll overlay: negative dy = swipe up = scroll down (show later content)
                 scroll_amount = -dy // 15  # Scale down for line-based scrolling
                 if scroll_amount != 0:
                     self.display.scroll_overlay(scroll_amount)
             else:
-                # Check if drag is in activity feed area (right panel)
+                # Check if drag is in right panel
                 molty_w = config.LAYOUT["molty_panel_width"]
                 if x > molty_w:
-                    # Scroll activity feed: swipe up = show older entries
-                    current = self.display.get_scroll_offset()
-                    scroll_delta = -dy // 20
-                    if scroll_delta != 0:
-                        self.display.set_scroll_offset(current + scroll_delta)
+                    # Delegate to active view
+                    active_view = self.display.view_manager.active_view
+                    if active_view:
+                        active_view.on_drag(x, y, dx, dy)
+
+        def on_swipe(start_x, start_y, direction):
+            """Handle horizontal swipe for view switching."""
+            # Only for swipes starting in right panel
+            molty_w = config.LAYOUT["molty_panel_width"]
+            if start_x <= molty_w:
+                return
+            # Ignore if overlay or approval modal visible
+            if self.display.is_overlay_visible() or self.display.is_approval_visible():
+                return
+
+            if direction == "left":
+                self.display.view_manager.next_view()
+            elif direction == "right":
+                self.display.view_manager.prev_view()
+            print(f"[Main] Swipe {direction} → view {self.display.view_manager.active_index}")
 
         self.touch.on_tap = on_tap
         self.touch.on_long_press = on_long_press
         self.touch.on_drag = on_drag
+        self.touch.on_swipe = on_swipe
 
     def _setup_presence_callback(self):
         """Configure presence change handler."""
@@ -638,7 +702,8 @@ class DSICommandCenter:
         self.display = DSIDisplay(demo_mode=self.demo_mode, screen_size=self.screen_size)
         self.touch = TouchHandler(screen_size=self.screen_size)
 
-        # Setup callbacks
+        # Setup views and callbacks
+        self.display.setup_views(self.bridge)
         self._setup_bridge_callbacks()
         self._setup_touch_callbacks()
         self._setup_presence_callback()

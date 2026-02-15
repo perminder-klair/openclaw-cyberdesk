@@ -106,6 +106,7 @@ class OpenClawWebSocketClient:
         on_notification: Optional[Callable[[Notification], None]] = None,
         on_status_change: Optional[Callable[[Dict], None]] = None,
         on_connection_change: Optional[Callable[[ConnectionState], None]] = None,
+        on_approval_requested: Optional[Callable[[Dict], None]] = None,
     ):
         self.url = url
         self.password = password
@@ -116,6 +117,7 @@ class OpenClawWebSocketClient:
         self._on_notification = on_notification
         self._on_status_change = on_status_change
         self._on_connection_change = on_connection_change
+        self._on_approval_requested = on_approval_requested
 
         # State
         self._state = ConnectionState.DISCONNECTED
@@ -161,6 +163,15 @@ class OpenClawWebSocketClient:
         self._public_key = None
         self._device_id = None
         self._load_or_generate_keys()
+
+        # Deep integration state
+        self._presence_data: Dict[str, Any] = {}
+        self._health_data: Dict[str, Any] = {}
+        self._gateway_info: Dict[str, Any] = {}
+        self._pending_approvals: List[Dict] = []
+        self._last_tick: float = 0
+        self._runs_data: List[Dict] = []
+        self._cron_data: List[Dict] = []
 
     def _next_request_id(self) -> str:
         """Generate next request ID."""
@@ -528,6 +539,24 @@ class OpenClawWebSocketClient:
                             self._session_id = payload["sessionId"]
                         if "deviceToken" in payload:
                             print("[WebSocket] Received device token")
+
+                        # Parse gateway snapshot from hello-ok
+                        with self._lock:
+                            self._gateway_info = {
+                                "uptimeMs": payload.get("uptimeMs", 0),
+                                "stateVersion": payload.get("stateVersion", 0),
+                                "ts": payload.get("ts", 0),
+                            }
+                            presence = payload.get("presence", [])
+                            if isinstance(presence, list):
+                                self._presence_data = {
+                                    d.get("deviceId", d.get("id", str(i))): d
+                                    for i, d in enumerate(presence)
+                                }
+                            health = payload.get("health", {})
+                            if isinstance(health, dict):
+                                self._health_data = health
+
                         return True
                     else:
                         error = data.get("error", {})
@@ -871,12 +900,11 @@ class OpenClawWebSocketClient:
             # state == "delta" is redundant with agent assistant stream, skip it
 
         elif event_name == "tick":
-            # Periodic heartbeat (just timestamp)
-            pass
+            self._last_tick = time.time()
 
         elif event_name == "health":
-            # Health check - silently ignore
-            pass
+            with self._lock:
+                self._health_data = payload
 
         elif event_name in ("error",):
             error = payload.get("message", payload.get("error", "Unknown error"))
@@ -898,12 +926,33 @@ class OpenClawWebSocketClient:
             self._emit_notification("warning", "Gateway Shutdown", msg, duration=10.0)
 
         elif event_name == "presence":
-            # Presence updates about connected devices - silently ignore
-            pass
+            with self._lock:
+                devices = payload.get("devices", payload.get("clients", []))
+                if isinstance(devices, list):
+                    self._presence_data = {
+                        d.get("deviceId", d.get("id", str(i))): d
+                        for i, d in enumerate(devices)
+                    }
+                elif isinstance(payload, dict):
+                    self._presence_data = payload
 
         elif event_name == "exec.approval.requested":
-            # Tool execution needs approval
             tool = payload.get("tool", payload.get("name", "unknown"))
+            approval = {
+                "id": payload.get("id", payload.get("approvalId", "")),
+                "tool": tool,
+                "args": payload.get("args", payload.get("input", {})),
+                "description": payload.get("description", ""),
+                "run_id": payload.get("runId", ""),
+                "requested_at": time.time(),
+            }
+            with self._lock:
+                self._pending_approvals.append(approval)
+            if self._on_approval_requested:
+                try:
+                    self._on_approval_requested(approval)
+                except Exception as e:
+                    print(f"[WebSocket] Approval callback error: {e}")
             self._emit_notification("warning", f"Approval: {tool}", "Needs approval", duration=10.0)
 
         else:
@@ -1025,6 +1074,87 @@ class OpenClawWebSocketClient:
             self._emit_notification("warning", "Cancelling...", "", duration=1.0)
             return True
         return False
+
+    # === Deep Integration Accessors ===
+
+    @property
+    def presence_data(self) -> Dict[str, Any]:
+        with self._lock:
+            return dict(self._presence_data)
+
+    @property
+    def health_data(self) -> Dict[str, Any]:
+        with self._lock:
+            return dict(self._health_data)
+
+    @property
+    def gateway_info(self) -> Dict[str, Any]:
+        with self._lock:
+            return dict(self._gateway_info)
+
+    @property
+    def pending_approvals(self) -> List[Dict]:
+        with self._lock:
+            return list(self._pending_approvals)
+
+    @property
+    def runs_data(self) -> List[Dict]:
+        with self._lock:
+            return list(self._runs_data)
+
+    @property
+    def cron_data(self) -> List[Dict]:
+        with self._lock:
+            return list(self._cron_data)
+
+    @property
+    def last_tick(self) -> float:
+        return self._last_tick
+
+    def send_approval_response(self, approval_id: str, approved: bool):
+        """Send approval response for a tool execution request (thread-safe)."""
+        if self._loop and self.is_connected:
+            params = {
+                "id": approval_id,
+                "approved": approved,
+            }
+            # Remove from pending list
+            with self._lock:
+                self._pending_approvals = [
+                    a for a in self._pending_approvals if a.get("id") != approval_id
+                ]
+            asyncio.run_coroutine_threadsafe(
+                self._send_fire_and_forget("exec.approval.respond", params),
+                self._loop
+            )
+            action = "Approved" if approved else "Denied"
+            self._emit_notification("info", f"Tool {action}", "", duration=2.0)
+
+    def request_runs_list(self):
+        """Request runs list from gateway (thread-safe)."""
+        if self._loop and self.is_connected:
+            async def _fetch_runs():
+                resp = await self._send_request("runs.list", {})
+                if resp and resp.get("ok"):
+                    payload = resp.get("payload", {})
+                    runs = payload.get("runs", payload if isinstance(payload, list) else [])
+                    with self._lock:
+                        self._runs_data = runs if isinstance(runs, list) else []
+
+            asyncio.run_coroutine_threadsafe(_fetch_runs(), self._loop)
+
+    def request_cron_list(self):
+        """Request cron/scheduled jobs list from gateway (thread-safe)."""
+        if self._loop and self.is_connected:
+            async def _fetch_cron():
+                resp = await self._send_request("cron.list", {})
+                if resp and resp.get("ok"):
+                    payload = resp.get("payload", {})
+                    jobs = payload.get("jobs", payload if isinstance(payload, list) else [])
+                    with self._lock:
+                        self._cron_data = jobs if isinstance(jobs, list) else []
+
+            asyncio.run_coroutine_threadsafe(_fetch_cron(), self._loop)
 
     def force_reconnect(self):
         """Force a reconnection (thread-safe)."""

@@ -65,6 +65,7 @@ class OpenClawBridge:
         self._on_notification: Optional[Callable[[Notification], None]] = None
         self._on_status_change: Optional[Callable[[Dict], None]] = None
         self._on_connection_change: Optional[Callable[[ConnectionState], None]] = None
+        self._on_approval_requested: Optional[Callable[[Dict], None]] = None
 
         # WebSocket client (only in non-demo mode)
         self._ws_client: Optional[OpenClawWebSocketClient] = None
@@ -104,6 +105,7 @@ class OpenClawBridge:
         on_notification: Optional[Callable[[Notification], None]] = None,
         on_status_change: Optional[Callable[[Dict], None]] = None,
         on_connection_change: Optional[Callable[[ConnectionState], None]] = None,
+        on_approval_requested: Optional[Callable[[Dict], None]] = None,
     ):
         """Set callbacks for events."""
         self._on_message_chunk = on_message_chunk
@@ -111,6 +113,7 @@ class OpenClawBridge:
         self._on_notification = on_notification
         self._on_status_change = on_status_change
         self._on_connection_change = on_connection_change
+        self._on_approval_requested = on_approval_requested
 
     def connect(self) -> bool:
         """
@@ -136,6 +139,7 @@ class OpenClawBridge:
                 on_notification=self._handle_ws_notification,
                 on_status_change=self._handle_ws_status_change,
                 on_connection_change=self._handle_ws_connection_change,
+                on_approval_requested=self._handle_ws_approval_requested,
             )
             self._ws_client.start()
             print(f"[Bridge] Connecting to {self.config.url}")
@@ -508,6 +512,60 @@ class OpenClawBridge:
 
         with self.lock:
             return self._status.get("is_streaming", False)
+
+    # === Deep Integration Accessors ===
+
+    def _handle_ws_approval_requested(self, approval: Dict):
+        """Handle tool approval request from WebSocket."""
+        if self._on_approval_requested:
+            self._on_approval_requested(approval)
+
+    def get_presence_data(self) -> Dict:
+        if self._ws_client:
+            return self._ws_client.presence_data
+        return {}
+
+    def get_health_data(self) -> Dict:
+        if self._ws_client:
+            return self._ws_client.health_data
+        return {}
+
+    def get_gateway_info(self) -> Dict:
+        if self._ws_client:
+            return self._ws_client.gateway_info
+        return {}
+
+    def get_pending_approvals(self) -> list:
+        if self._ws_client:
+            return self._ws_client.pending_approvals
+        return []
+
+    def get_runs_data(self) -> list:
+        if self._ws_client:
+            return self._ws_client.runs_data
+        return []
+
+    def get_cron_data(self) -> list:
+        if self._ws_client:
+            return self._ws_client.cron_data
+        return []
+
+    def get_last_tick(self) -> float:
+        if self._ws_client:
+            return self._ws_client.last_tick
+        return 0
+
+    def send_approval_response(self, approval_id: str, approved: bool):
+        if self._ws_client:
+            self._ws_client.send_approval_response(approval_id, approved)
+
+    def request_runs_list(self):
+        if self._ws_client:
+            self._ws_client.request_runs_list()
+
+    def request_cron_list(self):
+        if self._ws_client:
+            self._ws_client.request_cron_list()
 
     def cleanup(self):
         """Clean up resources."""

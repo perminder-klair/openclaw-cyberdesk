@@ -90,6 +90,9 @@ LAYOUT = {
     "button_radius": 10,
     "card_radius": 10,
     "panel_radius": 12,
+
+    # View indicator
+    "view_indicator_height": 25,
 }
 
 # Font paths - Custom fonts with fallbacks
@@ -187,8 +190,10 @@ BUTTONS = [
      "timeout": 45, "long_press_command": "Check my Vikunja tasks and give a detailed breakdown of everything due this week"},
     {"id": "brief", "label": "BRIEF", "command": "Give me a briefing of my day", "timeout": 45},
     {"id": "focus", "label": "FOCUS", "command": "Activate focus mode"},
-    {"id": "queue", "label": "QUEUE", "command": "Execute next queued automation"},
-    {"id": "status", "label": "STATUS", "command": "Report your current status", "timeout": 10},
+    {"id": "queue", "label": "QUEUE", "command": "__view_queue__",
+     "long_press_command": "Execute next queued automation"},
+    {"id": "status", "label": "STATUS", "command": "__view_health__",
+     "long_press_command": "Report your current status", "timeout": 10},
 ]
 
 # Default command timeout in seconds
@@ -222,6 +227,19 @@ TOUCH = {
     "long_press_ms": 500,
     "tap_threshold_px": 15,  # Movement threshold to still count as tap
     "button_flash_duration": 2.0,  # seconds for success/error flash
+    "swipe_threshold_px": 80,
+}
+
+# View system
+VIEWS = {
+    "indicator_height": 25,
+}
+
+# Tool approval modal
+APPROVAL = {
+    "timeout_seconds": 120,
+    "panel_width": 600,
+    "panel_height": 380,
 }
 
 # Sprites

@@ -25,6 +25,12 @@ from ui.glass_theme import GlassRenderer
 from ui.molty import Molty, MoltyState
 from ui.activity_feed import ActivityFeed, ActivityEntry
 from ui.text_utils import clean_response_text
+from ui.view_manager import ViewManager, ACTIVITY, HEALTH, QUEUE, CRON
+from ui.activity_view import ActivityView
+from ui.health_view import HealthView
+from ui.queue_view import QueueView
+from ui.cron_view import CronView
+from ui.approval_modal import ApprovalModal
 from touch_dsi import ButtonHitTester
 
 
@@ -81,6 +87,10 @@ class DSIDisplay:
 
         # Pre-rendered button rects
         self._button_rects = []
+
+        # View system
+        self.view_manager = ViewManager()
+        self.approval_modal = ApprovalModal(self.glass, self._fonts)
 
     # === State Setters ===
 
@@ -173,6 +183,30 @@ class DSIDisplay:
             max_scroll = max(0, self._overlay_total_lines - 1)
             self._overlay_scroll_offset = max(0, min(new_offset, max_scroll))
 
+    # === View Setup ===
+
+    def setup_views(self, bridge):
+        """Create and register all right-panel views."""
+        self.view_manager = ViewManager()
+        self.view_manager.add_view(ActivityView(self.glass, self._fonts, self))
+        self.view_manager.add_view(HealthView(self.glass, self._fonts, bridge))
+        self.view_manager.add_view(QueueView(self.glass, self._fonts, bridge))
+        self.view_manager.add_view(CronView(self.glass, self._fonts, bridge))
+
+    # === Approval Modal ===
+
+    def show_approval(self, approval: dict):
+        self.approval_modal.show(approval)
+
+    def dismiss_approval(self):
+        self.approval_modal.dismiss()
+
+    def is_approval_visible(self) -> bool:
+        return self.approval_modal.is_visible
+
+    def find_approval_button(self, x: int, y: int) -> str:
+        return self.approval_modal.find_button(x, y)
+
     # === Streaming Text ===
 
     def append_streaming_text(self, msg_id: str, chunk: str):
@@ -258,10 +292,22 @@ class DSIDisplay:
         # 3. Draw left panel content (below top bar)
         self._draw_left_panel(draw, frame, 0, top_bar_h, molty_panel_w, self.height - top_bar_h)
 
-        # 4. Draw right panel content (activity feed, below top bar)
+        # 4. Draw right panel content (view system, below top bar)
         right_x = molty_panel_w
         right_w = self.width - molty_panel_w
-        self._draw_activity_feed(draw, right_x, top_bar_h, right_w, self.height - top_bar_h)
+
+        # View indicator dots + title
+        indicator_h = config.LAYOUT.get("view_indicator_height", 25)
+        self._draw_view_indicator(draw, right_x, top_bar_h, right_w, indicator_h)
+
+        # Active view content (below indicator)
+        active_view = self.view_manager.active_view
+        if active_view:
+            active_view.render(draw, right_x, top_bar_h + indicator_h,
+                               right_w, self.height - top_bar_h - indicator_h)
+        else:
+            # Fallback: draw activity feed directly
+            self._draw_activity_feed(draw, right_x, top_bar_h, right_w, self.height - top_bar_h)
 
         # 5. Overlay (drawn on top of all panels)
         with self.lock:
@@ -269,7 +315,11 @@ class DSIDisplay:
         if overlay_entry is not None:
             self._draw_overlay(draw, frame, overlay_entry)
 
-        # 6. Scanlines
+        # 6. Approval modal (on top of everything except scanlines)
+        if self.approval_modal.is_visible:
+            self.approval_modal.render(draw, frame, self.width, self.height)
+
+        # 7. Scanlines
         self.glass.apply_scanlines(frame)
 
         return frame
@@ -383,6 +433,41 @@ class DSIDisplay:
         btn_panel_y = y + layout["button_panel_y_offset"]
         btn_panel_h = layout["button_panel_height"]
         self._draw_button_panel(draw, x, btn_panel_y, width, btn_panel_h)
+
+    def _draw_view_indicator(self, draw: ImageDraw.Draw, x: int, y: int,
+                              width: int, height: int):
+        """Draw view title (left) + navigation dots (right)."""
+        active_idx = self.view_manager.active_index
+        count = self.view_manager.view_count
+        active_view = self.view_manager.active_view
+
+        # View title
+        if active_view:
+            title = active_view.get_title()
+            title_font = self._fonts["mono_small"]
+            draw.text((x + 18, y + 4), title, font=title_font,
+                      fill=config.COLORS["accent_cyan"])
+
+        # Navigation dots (right-aligned)
+        if count > 1:
+            dot_spacing = 16
+            dots_width = count * dot_spacing
+            dots_x = x + width - dots_width - 18
+            dot_cy = y + height // 2
+
+            for i in range(count):
+                dot_x = dots_x + i * dot_spacing
+                if i == active_idx:
+                    draw.ellipse([dot_x - 4, dot_cy - 4, dot_x + 4, dot_cy + 4],
+                                 fill=config.COLORS["accent_cyan"])
+                else:
+                    draw.ellipse([dot_x - 3, dot_cy - 3, dot_x + 3, dot_cy + 3],
+                                 fill=config.COLORS["text_dim"])
+
+        # Subtle divider at bottom
+        divider_color = tuple(c // 5 for c in config.COLORS["accent_cyan"][:3])
+        draw.line([(x + 15, y + height - 1), (x + width - 15, y + height - 1)],
+                  fill=divider_color, width=1)
 
     def _draw_activity_feed(self, draw: ImageDraw.Draw, x: int, y: int,
                             width: int, height: int):
