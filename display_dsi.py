@@ -20,6 +20,7 @@ import config_dsi as config
 from ui.cyberpunk_theme import CyberpunkTheme, COLORS
 from ui.molty import Molty, MoltyState
 from ui.activity_feed import ActivityFeed, ActivityEntry
+from ui.text_utils import clean_response_text
 from touch_dsi import ButtonHitTester
 
 
@@ -125,6 +126,19 @@ class DSIDisplay:
         """Update status of most recent activity."""
         with self.lock:
             self.activity_feed.update_latest_status(status)
+
+    def get_latest_activity(self) -> Optional[ActivityEntry]:
+        """Get the most recent activity entry."""
+        with self.lock:
+            if self.activity_feed.entries:
+                return self.activity_feed.entries[-1]
+            return None
+
+    def clear_activity_feed(self):
+        """Clear all entries from the activity feed."""
+        with self.lock:
+            self.activity_feed.entries.clear()
+            self._scroll_offset = 0
 
     def set_status_text(self, text: str):
         """Set footer status text."""
@@ -423,7 +437,8 @@ class DSIDisplay:
 
         # Row 2+3: Detail text (medium, white, word-wrapped up to 2 lines)
         if entry.detail:
-            wrapped = self._word_wrap(entry.detail, self._fonts["medium"], text_w)
+            cleaned = clean_response_text(entry.detail)
+            wrapped = self._word_wrap(cleaned, self._fonts["medium"], text_w)
             for i, line in enumerate(wrapped[:2]):
                 if i == 1 and len(wrapped) > 2:
                     line = self._truncate_text(line, self._fonts["medium"], text_w)
@@ -475,6 +490,12 @@ class DSIDisplay:
                 "bg": (30, 0, 0),
                 "border": config.COLORS["neon_red"],
                 "text": config.COLORS["neon_red"],
+                "glow": True,
+            },
+            "listening": {
+                "bg": (25, 0, 35),
+                "border": config.COLORS["electric_purple"],
+                "text": config.COLORS["electric_purple"],
                 "glow": True,
             },
         }
@@ -636,7 +657,7 @@ class DSIDisplay:
         self.theme.draw_neon_text(
             draw, (content_x, content_y),
             entry.title,
-            self._fonts["large"],
+            self._fonts["medium"],
             bar_color,
             glow_layers=1
         )
@@ -653,25 +674,26 @@ class DSIDisplay:
         )
 
         # Separator line
-        sep_y = content_y + 45
+        sep_y = content_y + 35
         draw.line([(content_x, sep_y), (panel_x2 - 25, sep_y)],
                   fill=config.COLORS["panel_border"], width=1)
 
         # Word-wrapped detail text
-        text_y = sep_y + 15
-        line_height = 46
+        text_y = sep_y + 12
+        line_height = 34
         max_text_y = panel_y2 - 55  # Leave room for hint
 
         if entry.detail:
-            wrapped = self._word_wrap(entry.detail, self._fonts["large"], content_w)
+            cleaned = clean_response_text(entry.detail)
+            wrapped = self._word_wrap(cleaned, self._fonts["medium"], content_w)
             for line in wrapped:
                 if text_y + line_height > max_text_y:
                     draw.text((content_x, text_y), "...",
-                              font=self._fonts["large"],
+                              font=self._fonts["medium"],
                               fill=config.COLORS["text_dim"])
                     break
                 draw.text((content_x, text_y), line,
-                          font=self._fonts["large"],
+                          font=self._fonts["medium"],
                           fill=config.COLORS["text_primary"])
                 text_y += line_height
 

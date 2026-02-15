@@ -63,6 +63,10 @@ class DSICommandCenter:
         self._active_button_id = None
         self._molty_state_timer = None
 
+        # Voice state
+        self._voice_active = False
+        self._voice_poll_thread: threading.Thread = None
+
         # Demo mode state
         self._demo_action_index = 0
 
@@ -152,6 +156,12 @@ class DSICommandCenter:
             content = message.get("content", "")
             self.display.add_activity("status", "Response", content, "done")
 
+            # Auto-open overlay for button-triggered responses
+            if self._active_button_id:
+                entry = self.display.get_latest_activity()
+                if entry and entry.detail:
+                    self.display.show_overlay(entry)
+
             self._set_molty_state_with_timer(MoltyState.SUCCESS, 2.0)
             self.hardware.set_led_state("success")
 
@@ -159,6 +169,15 @@ class DSICommandCenter:
                 self.display.set_button_state(self._active_button_id, "success")
                 self._reset_button_after_delay(self._active_button_id, 1.0)
                 self._active_button_id = None
+
+            # Speak response aloud via TTS
+            if content:
+                tts_text = content[:500]
+                threading.Thread(
+                    target=self.hardware.speak,
+                    args=(tts_text,),
+                    daemon=True
+                ).start()
 
         self.bridge.set_callbacks(
             on_message_chunk=on_message_chunk,
@@ -195,6 +214,156 @@ class DSICommandCenter:
         timer.daemon = True
         timer.start()
 
+    def _handle_new_session_tap(self, button: dict):
+        """Handle tap on the NEW button to start a fresh session."""
+        self.display.set_button_state(button["id"], "pressed")
+
+        if self.bridge.is_connected():
+            self.display.set_button_state(button["id"], "running")
+
+            # Clear UI and bridge state
+            self.display.clear_activity_feed()
+            self.bridge.start_new_session()
+
+            # Show fresh session entry
+            self.display.add_activity("status", "New Session Started", "Ready for commands")
+            self.display.set_molty_state(MoltyState.IDLE)
+            self.hardware.set_led_state("idle")
+
+            # Brief success flash
+            self.display.set_button_state(button["id"], "success")
+            self._reset_button_after_delay(button["id"], 1.0)
+        else:
+            self.display.set_button_state(button["id"], "error")
+            self._reset_button_after_delay(button["id"], 1.0)
+            self.display.add_activity("error", "Not Connected", "Cannot start new session", "fail")
+            self._set_molty_state_with_timer(MoltyState.ERROR, 2.0)
+            self.hardware.set_led_state("error")
+
+    def _handle_voice_tap(self, button: dict):
+        """Handle tap on the VOICE button."""
+        if self._voice_active:
+            # Already listening - cancel
+            self._cancel_voice()
+            return
+
+        # Start listening
+        print("[Main] Starting voice recording")
+        if not self.hardware.start_listening(mode="assistant"):
+            print("[Main] Failed to start voice recording")
+            self.display.set_button_state(button["id"], "error")
+            self._reset_button_after_delay(button["id"], 1.5)
+            self.display.add_activity("error", "Voice Error", "Could not start recording", "fail")
+            self._set_molty_state_with_timer(MoltyState.ERROR, 2.0)
+            self.hardware.set_led_state("error")
+            return
+
+        self._voice_active = True
+        self.display.set_button_state(button["id"], "listening")
+        self.display.set_molty_state(MoltyState.LISTENING)
+        self.hardware.set_led_state("listening")
+        self.display.add_activity("notification", "Listening...", "Speak your command", "running")
+
+        # Start polling thread
+        self._voice_poll_thread = threading.Thread(
+            target=self._voice_poll_loop,
+            daemon=True
+        )
+        self._voice_poll_thread.start()
+
+    def _voice_poll_loop(self):
+        """Poll voice status until recording completes or is cancelled."""
+        seen_active = False  # Track if we've seen listening/processing
+        start_time = time.time()
+
+        while self._voice_active:
+            time.sleep(0.3)
+
+            status = self.hardware.get_voice_status()
+            if status is None:
+                # Hardware server unavailable
+                print("[Main] Voice status poll failed")
+                self._voice_active = False
+                self.display.set_button_state("voice", "error")
+                self._reset_button_after_delay("voice", 1.5)
+                self.display.update_latest_activity_status("fail")
+                self._set_molty_state_with_timer(MoltyState.ERROR, 2.0)
+                self.hardware.set_led_state("error")
+                return
+
+            state = status.get("state", "idle")
+            transcript = status.get("lastTranscript")
+
+            # Track when we've seen the hardware actually start recording
+            if state in ("listening", "processing"):
+                seen_active = True
+
+            if state == "idle":
+                # Only treat idle as "done" after we've seen it leave idle
+                if not seen_active:
+                    # Still waiting for hardware to pick up the event
+                    if time.time() - start_time > 5.0:
+                        # Timeout — hardware never started listening
+                        print("[Main] Voice start timeout - hardware never began listening")
+                        self._voice_active = False
+                        self.display.set_button_state("voice", "error")
+                        self._reset_button_after_delay("voice", 1.5)
+                        self.display.update_latest_activity_status("fail")
+                        self._set_molty_state_with_timer(MoltyState.ERROR, 2.0)
+                        self.hardware.set_led_state("error")
+                        return
+                    continue  # Keep polling — not started yet
+
+                # Recording finished (seen_active was True, now back to idle)
+                self._voice_active = False
+
+                if transcript:
+                    # Got a transcript - send to OpenClaw
+                    print(f"[Main] Voice transcript: {transcript}")
+                    self.hardware.clear_transcript()
+
+                    self.display.update_latest_activity_status("done")
+                    self.display.add_activity("tool", "Voice", transcript, "running")
+
+                    self.display.set_button_state("voice", "running")
+                    self.display.set_molty_state(MoltyState.WORKING)
+                    self.hardware.set_led_state("working")
+                    self._active_button_id = "voice"
+
+                    self.bridge.send_message(transcript)
+
+                    # Timeout handler
+                    def voice_command_timeout():
+                        if self._active_button_id == "voice":
+                            print("[Main] Voice command timeout")
+                            self.display.set_molty_state(MoltyState.IDLE)
+                            self.display.update_latest_activity_status("done")
+                            self.display.reset_button("voice")
+                            self._active_button_id = None
+                            self.hardware.set_led_state("idle")
+
+                    timer = threading.Timer(15.0, voice_command_timeout)
+                    timer.daemon = True
+                    timer.start()
+                else:
+                    # No transcript - recording cancelled or silence
+                    print("[Main] Voice recording ended without transcript")
+                    self.display.update_latest_activity_status("done")
+                    self.display.reset_button("voice")
+                    self.display.set_molty_state(MoltyState.IDLE)
+                    self.hardware.set_led_state("idle")
+                return
+
+    def _cancel_voice(self):
+        """Cancel active voice recording."""
+        self._voice_active = False
+        self.hardware.cancel_listening()
+        self.display.reset_button("voice")
+        self.display.update_latest_activity_status("done")
+        self.display.add_activity("notification", "Cancelled", "Voice recording cancelled")
+        self.display.set_molty_state(MoltyState.IDLE)
+        self.hardware.set_led_state("idle")
+
     def _setup_touch_callbacks(self):
         """Configure touch event handlers."""
 
@@ -217,6 +386,16 @@ class DSICommandCenter:
 
             if button:
                 print(f"[Main] Button tapped: {button['id']} - {button['label']}")
+
+                # Voice button handling
+                if button.get("command") == "__voice__":
+                    self._handle_voice_tap(button)
+                    return
+
+                # New session button handling
+                if button["id"] == "new_session":
+                    self._handle_new_session_tap(button)
+                    return
 
                 # Visual feedback
                 self.display.set_button_state(button["id"], "pressed")
@@ -282,6 +461,12 @@ class DSICommandCenter:
             # Dismiss overlay if visible (consumes long press)
             if self.display.is_overlay_visible():
                 self.display.dismiss_overlay()
+                return
+
+            # Cancel voice if active (any long press)
+            if self._voice_active:
+                print("[Main] Long press - cancelling voice recording")
+                self._cancel_voice()
                 return
 
             if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT["button_panel_y_offset"]:
@@ -478,6 +663,10 @@ class DSICommandCenter:
         """Signal to stop the main loop."""
         print("\n[Main] Shutting down...")
         self.running = False
+
+        if self._voice_active:
+            self._voice_active = False
+            self.hardware.cancel_listening()
 
         if self._molty_state_timer:
             self._molty_state_timer.cancel()

@@ -123,10 +123,10 @@ class HardwareClient:
         Set LED to predefined state.
 
         Args:
-            state: One of "idle", "working", "success", "error", "connected", "disconnected"
+            state: One of "idle", "working", "success", "error", "connected", "disconnected", "listening"
         """
         led_config = config.LED_STATES.get(state, config.LED_STATES["idle"])
-        mode = "pulse" if state == "working" else "static"
+        mode = "pulse" if state in ("working", "listening") else "static"
         duration = 1.0 if state in ("success", "error") else 0
 
         self.set_led(
@@ -257,6 +257,30 @@ class HardwareClient:
             "text": text,
             "priority": priority
         })
+
+    def start_listening(self, mode: str = "assistant") -> bool:
+        """Start voice recording via hardware server."""
+        result = self._request("POST", self.endpoints["voice_listen"], json={"mode": mode})
+        if result is None:
+            return False
+        if "error" in result:
+            print(f"[Hardware] Voice listen error: {result['error']}")
+            return False
+        return True
+
+    def get_voice_status(self) -> Optional[Dict[str, Any]]:
+        """Get current voice pipeline status. Returns {state, lastTranscript, ...}."""
+        return self._request("GET", self.endpoints["voice_status"])
+
+    def cancel_listening(self) -> bool:
+        """Cancel active voice recording."""
+        result = self._request("POST", self.endpoints["voice_cancel"])
+        return result is not None
+
+    def clear_transcript(self) -> bool:
+        """Clear the last transcript from hardware server."""
+        result = self._request("POST", self.endpoints["voice_clear"])
+        return result is not None
 
     # === Status ===
 

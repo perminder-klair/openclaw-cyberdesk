@@ -26,6 +26,10 @@ HARDWARE_SERVER = {
         "presence": "/presence",
         "brightness": "/brightness",
         "voice_speak": "/voice/speak",
+        "voice_status": "/voice/status",
+        "voice_listen": "/voice/listen",
+        "voice_cancel": "/voice/cancel",
+        "voice_clear": "/voice/clear-transcript",
     },
 }
 
@@ -37,6 +41,7 @@ LED_STATES = {
     "error": {"r": 255, "g": 0, "b": 0},      # Red flash
     "connected": {"r": 0, "g": 100, "b": 0},  # Dim green
     "disconnected": {"r": 50, "g": 0, "b": 0}, # Dim red
+    "listening": {"r": 191, "g": 0, "b": 255},  # Purple
 }
 
 # Presence-based Backlight
@@ -63,9 +68,11 @@ PRESENCE_BACKLIGHT = {
 # │  | QUEUE| | FOCUS|       │                                                          │
 # │  +──────+ +──────+       │                                                          │
 # │  +──────+ +──────+       │                                                          │
-# │  |STATUS| |RANDOM|       │                                                          │
+# │  |STATUS| |VOICE |       │                                                          │
 # │  +──────+ +──────+       │                                                          │
-# │                          │                                                          │
+# │  +──────+ +──────+       │                                                          │
+# │  | NEW  | |      |       │                                                          │
+# │  +──────+ +──────+       │                                                          │
 # └──────────────────────────┴──────────────────────────────────────────────────────────┘
 
 LAYOUT = {
@@ -80,7 +87,7 @@ LAYOUT = {
     "state_label_offset_y": 148,  # Y offset from panel top for state label
     # Button panel in left sidebar
     "button_panel_y_offset": 195,  # Where buttons start in left panel
-    "button_panel_height": 260,
+    "button_panel_height": 336,
 
     # Right panel (activity feed uses full height)
     "activity_feed_height_ratio": 1.0,
@@ -90,9 +97,9 @@ LAYOUT = {
     "activity_entry_height": 105,
     "activity_max_visible": 6,
 
-    # Button grid (2x3 in left panel)
+    # Button grid (2x4 in left panel)
     "button_cols": 2,
-    "button_rows": 3,
+    "button_rows": 4,
     "button_gap": 16,
     "button_padding": 24,
 }
@@ -125,14 +132,15 @@ COLORS = {
     "text_secondary": (100, 150, 150),
 }
 
-# Button commands (2x3 grid in left panel)
+# Button commands (2x4 grid in left panel)
 BUTTONS = [
     {"id": "inbox", "label": "INBOX", "command": "Check inbox and summarize urgent items"},
     {"id": "brief", "label": "BRIEF", "command": "Give me a briefing of my day"},
     {"id": "queue", "label": "QUEUE", "command": "Execute next queued automation"},
     {"id": "focus", "label": "FOCUS", "command": "Activate focus mode"},
     {"id": "status", "label": "STATUS", "command": "Report your current status"},
-    {"id": "random", "label": "RANDOM", "command": "Do something useful"},
+    {"id": "voice", "label": "VOICE", "command": "__voice__"},
+    {"id": "new_session", "label": "NEW", "command": "/new"},
 ]
 
 # OpenClaw Connection (inherited from original config)

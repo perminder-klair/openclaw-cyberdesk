@@ -401,6 +401,22 @@ class OpenClawBridge:
 
         return False
 
+    def start_new_session(self) -> bool:
+        """Start a new OpenClaw session by sending /new and clearing local state."""
+        print("[Bridge] Starting new session")
+
+        with self.lock:
+            self._messages = []
+            self._message_index = 0
+            self._ws_messages_cursor = 0
+            self._current_streaming = None
+            self._status["is_streaming"] = False
+            self._status["last_activity"] = datetime.now()
+
+        result = self.send_message("/new")
+        self.add_notification("info", "New session started")
+        return result
+
     def cancel_current(self) -> bool:
         """Cancel the current operation."""
         print("[Bridge] Cancel requested")
