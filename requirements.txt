@@ -3,6 +3,12 @@
 # Display and image rendering
 Pillow>=9.0.0
 
+# DSI display (pygame/SDL2)
+pygame>=2.5.0
+
+# HTTP client for hardware server integration
+requests>=2.31.0
+
 # WebSocket client for OpenClaw connection
 websockets>=10.0
 

@@ -76,14 +76,17 @@ class Molty:
 
     SPRITE_SIZE = (80, 80)
 
-    def __init__(self, sprite_dir=None):
+    def __init__(self, sprite_dir=None, sprite_size=None):
         """
         Initialize Molty with optional sprite directory.
 
         Args:
             sprite_dir: Path to sprite PNG files (optional)
+            sprite_size: Tuple (width, height) for sprite size, defaults to (80, 80)
         """
         self.sprite_dir = Path(sprite_dir) if sprite_dir else None
+        if sprite_size:
+            self.SPRITE_SIZE = sprite_size
         self.state = MoltyState.IDLE
         self.sprites = {}
         self._load_sprites()

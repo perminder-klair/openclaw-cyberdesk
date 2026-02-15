@@ -51,14 +51,20 @@ class ActivityFeed:
     MAX_VISIBLE = 5
     ENTRY_HEIGHT = 54
 
-    def __init__(self, theme: CyberpunkTheme = None):
+    def __init__(self, theme: CyberpunkTheme = None, max_visible: int = None, entry_height: int = None):
         """
         Initialize the activity feed.
 
         Args:
             theme: CyberpunkTheme instance (creates one if not provided)
+            max_visible: Maximum number of visible entries (default 5)
+            entry_height: Height of each entry in pixels (default 54)
         """
         self.theme = theme or CyberpunkTheme()
+        if max_visible is not None:
+            self.MAX_VISIBLE = max_visible
+        if entry_height is not None:
+            self.ENTRY_HEIGHT = entry_height
         self.entries: List[ActivityEntry] = []
         self._max_entries = 20  # Keep more in memory for scrolling
 
