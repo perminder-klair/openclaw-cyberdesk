@@ -102,7 +102,7 @@ class HardwareClient:
 
     # === LED Control ===
 
-    def set_led(self, r: int, g: int, b: int, mode: str = "static", duration: float = 0):
+    def set_led(self, r: int, g: int, b: int, mode: str = "static", duration: float = 0, ambient: bool = True):
         """
         Set LED color and mode.
 
@@ -112,12 +112,13 @@ class HardwareClient:
             b: Blue (0-255)
             mode: "static", "pulse", or "flash"
             duration: Duration for pulse/flash (seconds)
+            ambient: If True, save as resting state on the hardware server
         """
         with self._lock:
             self._current_led = LEDState(r=r, g=g, b=b, mode=mode, duration=duration)
 
         color = f"#{r:02X}{g:02X}{b:02X}"
-        data = {"color": color, "mode": mode}
+        data = {"color": color, "mode": mode, "ambient": ambient}
         if duration > 0:
             data["duration"] = duration
 
@@ -125,7 +126,7 @@ class HardwareClient:
 
     def set_led_state(self, state: str):
         """
-        Set LED to predefined state.
+        Set LED to predefined state (transient — does not save as ambient).
 
         Args:
             state: One of "idle", "working", "success", "error", "connected", "disconnected", "listening"
@@ -139,7 +140,8 @@ class HardwareClient:
             g=led_config["g"],
             b=led_config["b"],
             mode=mode,
-            duration=duration
+            duration=duration,
+            ambient=False
         )
 
     def flash_led(self, r: int, g: int, b: int, duration: float = 0.5):
@@ -152,6 +154,10 @@ class HardwareClient:
             self.set_led(prev_led.r, prev_led.g, prev_led.b, prev_led.mode)
 
         threading.Thread(target=restore, daemon=True).start()
+
+    def restore_ambient_led(self):
+        """Restore LED to the user's saved ambient (resting) state on the hardware server."""
+        self._request("POST", self.endpoints["led_restore"])
 
     # === Brightness Control ===
 

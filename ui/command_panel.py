@@ -30,44 +30,56 @@ class CommandButton:
 # Status bar: 35px at top
 # Footer: 0px (no footer needed, buttons extend to bottom)
 # Button area: 240 - 35 = 205px height
-# 3 rows of buttons: ~68px each, with ~4px spacing
+# 4 rows of buttons: ~50px each, with ~4px spacing
 # 2 columns: ~157px each, with ~6px spacing
 DEFAULT_BUTTONS = [
+    CommandButton(
+        id="new",
+        label="NEW",
+        command="Start a new conversation",
+        x=5, y=40, width=152, height=62
+    ),
+    CommandButton(
+        id="voice",
+        label="VOICE",
+        command="Activate voice mode",
+        x=163, y=40, width=152, height=62
+    ),
     CommandButton(
         id="inbox",
         label="INBOX",
         command="Check inbox and summarize urgent items",
-        x=5, y=40, width=152, height=62
+        x=5, y=107, width=152, height=62
+    ),
+    CommandButton(
+        id="tasks",
+        label="TASKS",
+        command="Show current tasks and priorities",
+        x=163, y=107, width=152, height=62
     ),
     CommandButton(
         id="brief",
         label="BRIEF",
         command="Give me a briefing of my day",
-        x=163, y=40, width=152, height=62
-    ),
-    CommandButton(
-        id="queue",
-        label="QUEUE",
-        command="Execute next queued automation",
-        x=5, y=107, width=152, height=62
+        x=5, y=174, width=152, height=62
     ),
     CommandButton(
         id="focus",
         label="FOCUS",
         command="Activate focus mode",
-        x=163, y=107, width=152, height=62
+        x=163, y=174, width=152, height=62
+    ),
+    CommandButton(
+        id="queue",
+        label="QUEUE",
+        command="Execute next queued automation",
+        x=5, y=241, width=152, height=62
     ),
     CommandButton(
         id="status",
         label="STATUS",
         command="Report your current status",
-        x=5, y=174, width=152, height=62
-    ),
-    CommandButton(
-        id="random",
-        label="RANDOM",
-        command="Do something useful",
-        x=163, y=174, width=152, height=62
+        x=163, y=241, width=152, height=62
     ),
 ]
 
@@ -139,7 +151,7 @@ class CommandPanel:
         padding = 5
         gap = 5
         cols = 2
-        rows = 3
+        rows = 4
 
         button_area_y = status_bar_h + 2
         button_area_h = height - button_area_y - padding

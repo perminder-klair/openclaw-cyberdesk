@@ -277,9 +277,9 @@ class ButtonHitTester:
         layout = self.layout
         screen_w, screen_h = self.screen_size
 
-        # Button panel in left sidebar
+        # Button panel in left sidebar (offset by top bar)
         button_panel_x = 0
-        button_panel_y = layout["button_panel_y_offset"]
+        button_panel_y = layout.get("top_bar_height", 0) + layout["button_panel_y_offset"]
         button_panel_w = layout["molty_panel_width"]
         button_panel_h = layout["button_panel_height"]
 

@@ -251,10 +251,6 @@ python main_dsi.py
 | `openclaw_config.py` | Configuration loader (.env + defaults) |
 | `ui/` | UI components (activity feed, command panel, cyberpunk theme, Molty renderer) |
 
-**Legacy Files (dual SPI version - not in active use):**
-- `main.py`, `config.py`, `display_main.py`, `display_status.py`
-- `touch_handler.py`, `rotary_handler.py`, `lcd_ticker.py`, `spi_lock.py`
-
 ## Hardware Server (Optional)
 
 The DSI display can integrate with a hardware server for enhanced features:

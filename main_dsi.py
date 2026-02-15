@@ -141,7 +141,7 @@ class DSICommandCenter:
 
         def on_message_chunk(msg_id, chunk):
             """Handle streaming message chunks."""
-            self.display.set_molty_state(MoltyState.LISTENING)
+            self.display.set_molty_state(MoltyState.THINKING)
             self.display.append_streaming_text(msg_id, chunk)
 
         def on_status_update(status):
@@ -220,7 +220,7 @@ class DSICommandCenter:
         def return_to_idle():
             if self.display.get_molty_state() == state:
                 self.display.set_molty_state(MoltyState.IDLE)
-                self.hardware.set_led_state("idle")
+                self.hardware.restore_ambient_led()
 
         self._molty_state_timer = threading.Timer(delay_seconds, return_to_idle)
         self._molty_state_timer.daemon = True
@@ -251,7 +251,7 @@ class DSICommandCenter:
             # Show fresh session entry
             self.display.add_activity("status", "New Session Started", "Ready for commands")
             self.display.set_molty_state(MoltyState.IDLE)
-            self.hardware.set_led_state("idle")
+            self.hardware.restore_ambient_led()
 
             # Brief success flash
             self.display.set_button_state(button["id"], "success")
@@ -366,7 +366,7 @@ class DSICommandCenter:
                             self.display.update_latest_activity_status("done")
                             self.display.reset_button("voice")
                             self._active_button_id = None
-                            self.hardware.set_led_state("idle")
+                            self.hardware.restore_ambient_led()
 
                     timer = threading.Timer(config.COMMAND_TIMEOUT, voice_command_timeout)
                     timer.daemon = True
@@ -377,7 +377,7 @@ class DSICommandCenter:
                     self.display.update_latest_activity_status("done")
                     self.display.reset_button("voice")
                     self.display.set_molty_state(MoltyState.IDLE)
-                    self.hardware.set_led_state("idle")
+                    self.hardware.restore_ambient_led()
                 return
 
     def _cancel_voice(self):
@@ -388,7 +388,7 @@ class DSICommandCenter:
         self.display.update_latest_activity_status("done")
         self.display.add_activity("notification", "Cancelled", "Voice recording cancelled")
         self.display.set_molty_state(MoltyState.IDLE)
-        self.hardware.set_led_state("idle")
+        self.hardware.restore_ambient_led()
 
     def _setup_touch_callbacks(self):
         """Configure touch event handlers."""
@@ -452,7 +452,7 @@ class DSICommandCenter:
                             self.display.update_latest_activity_status("done")
                             self.display.reset_button(active_btn)
                             self._active_button_id = None
-                            self.hardware.set_led_state("idle")
+                            self.hardware.restore_ambient_led()
 
                     timer = threading.Timer(timeout_secs, command_timeout)
                     timer.daemon = True
@@ -473,7 +473,7 @@ class DSICommandCenter:
 
             else:
                 # Tap outside buttons - check for connection/cost area tap
-                if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT["button_panel_y_offset"]:
+                if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT.get("top_bar_height", 0) + config.LAYOUT["button_panel_y_offset"]:
                     # Tapping Molty/label area - reconnect if disconnected
                     if not self.bridge.is_connected():
                         print("[Main] Molty area tap - forcing reconnect")
@@ -528,7 +528,7 @@ class DSICommandCenter:
                             self.display.update_latest_activity_status("done")
                             self.display.reset_button(active_btn)
                             self._active_button_id = None
-                            self.hardware.set_led_state("idle")
+                            self.hardware.restore_ambient_led()
 
                     timer = threading.Timer(timeout_secs, alt_command_timeout)
                     timer.daemon = True
@@ -538,7 +538,7 @@ class DSICommandCenter:
                     self._reset_button_after_delay(button["id"], 1.0)
                 return
 
-            if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT["button_panel_y_offset"]:
+            if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT.get("top_bar_height", 0) + config.LAYOUT["button_panel_y_offset"]:
                 # Long press on Molty/status area (above buttons) - force reconnect
                 print("[Main] Molty area long press - forcing reconnect")
                 self.bridge.force_reconnect()
@@ -551,7 +551,7 @@ class DSICommandCenter:
                     self._active_button_id = None
                     self.display.add_activity("notification", "Cancelled", "Operation cancelled")
                     self.display.set_molty_state(MoltyState.IDLE)
-                    self.hardware.set_led_state("idle")
+                    self.hardware.restore_ambient_led()
 
         def on_drag(x, y, dx, dy):
             """Handle drag events for scrolling."""
@@ -662,7 +662,13 @@ class DSICommandCenter:
             self.display.add_activity("notification", "Demo Mode", "Simulated data")
             self.display.set_molty_state(MoltyState.IDLE)
             self.display.set_connection_status(True, "demo-model", 0.0)
-            self.hardware.set_led_state("idle")
+            self.hardware.set_led(
+                r=config.LED_STATES["idle"]["r"],
+                g=config.LED_STATES["idle"]["g"],
+                b=config.LED_STATES["idle"]["b"],
+                mode="static",
+                ambient=True,
+            )
         else:
             self.display.add_activity("status", "Initializing", "Connecting to OpenClaw...")
 

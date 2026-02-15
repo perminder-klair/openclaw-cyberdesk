@@ -192,14 +192,15 @@ class DSIDisplay:
     def find_activity_entry(self, x: int, y: int) -> Optional[ActivityEntry]:
         layout = config.LAYOUT
         molty_panel_w = layout["molty_panel_width"]
+        top_bar_h = layout["top_bar_height"]
         right_x = molty_panel_w
         right_w = self.width - molty_panel_w
 
         feed_x = right_x
         activity_header_h = layout["activity_header_height"]
-        entries_y = feed_x and (0 + activity_header_h + 2)
+        entries_y = feed_x and (top_bar_h + activity_header_h + 2)
         entry_h = layout["activity_entry_height"]
-        entries_area_h = self.height - activity_header_h - 25
+        entries_area_h = self.height - top_bar_h - activity_header_h - 25
 
         if x < feed_x + 10 or x > feed_x + right_w - 10:
             return None
@@ -241,29 +242,96 @@ class DSIDisplay:
         """
         layout = config.LAYOUT
         molty_panel_w = layout["molty_panel_width"]
+        top_bar_h = layout["top_bar_height"]
 
         # 1. Compose frame: gradient bg + frosted panel areas (RGB)
         frame = self.glass.compose_frame(molty_panel_w)
         draw = ImageDraw.Draw(frame)
 
-        # 2. Draw left panel content
-        self._draw_left_panel(draw, frame, 0, 0, molty_panel_w, self.height)
+        # 2. Draw top bar (status + model + time)
+        self._draw_top_bar(draw, 0, 0, self.width, top_bar_h)
 
-        # 3. Draw right panel content (activity feed)
+        # 3. Draw left panel content (below top bar)
+        self._draw_left_panel(draw, frame, 0, top_bar_h, molty_panel_w, self.height - top_bar_h)
+
+        # 4. Draw right panel content (activity feed, below top bar)
         right_x = molty_panel_w
         right_w = self.width - molty_panel_w
-        self._draw_activity_feed(draw, right_x, 0, right_w, self.height)
+        self._draw_activity_feed(draw, right_x, top_bar_h, right_w, self.height - top_bar_h)
 
-        # 4. Overlay (drawn on top of all panels)
+        # 5. Overlay (drawn on top of all panels)
         with self.lock:
             overlay_entry = self._overlay_entry
         if overlay_entry is not None:
             self._draw_overlay(draw, frame, overlay_entry)
 
-        # 5. Scanlines
+        # 6. Scanlines
         self.glass.apply_scanlines(frame)
 
         return frame
+
+    def _draw_top_bar(self, draw: ImageDraw.Draw, x: int, y: int,
+                      width: int, height: int):
+        """Draw top bar with connection status, model name, cost, and time."""
+        with self.lock:
+            connected = self._connection_status
+            model = self._model_name
+            cost = self._api_cost
+
+        mono_small = self._fonts["mono_small"]
+        mono = self._fonts["mono"]
+        cx = x + 14
+        cy_text = y + (height - 16) // 2  # vertically center mono_small (approx 16px)
+
+        # Status dot
+        dot_color = config.COLORS["status_green"] if connected else config.COLORS["status_red"]
+        dot_cy = y + height // 2
+        draw.ellipse([cx, dot_cy - 4, cx + 8, dot_cy + 4], fill=dot_color)
+        cx += 14
+
+        # ONLINE / OFFLINE
+        status_text = "ONLINE" if connected else "OFFLINE"
+        draw.text((cx, cy_text), status_text, font=mono_small, fill=dot_color)
+        status_w, _ = self.glass.get_text_size(status_text, mono_small)
+        cx += status_w + 16
+
+        # Model name
+        if model:
+            model_display = self._truncate_text(model, mono_small, 300)
+            draw.text((cx, cy_text), model_display, font=mono_small,
+                      fill=config.COLORS["text_dim"])
+            model_w, _ = self.glass.get_text_size(model_display, mono_small)
+            cx += model_w + 16
+
+        # API cost
+        if cost > 0:
+            cost_str = f"${cost:.4f}"
+            draw.text((cx, cy_text), cost_str, font=mono_small,
+                      fill=config.COLORS["text_dim"])
+
+        # Date + Time (right-aligned, mono 20pt, accent cyan with soft glow)
+        now = datetime.now()
+        date_str = now.strftime("%a %b %d")
+        time_str = now.strftime("%H:%M:%S")
+        datetime_str = f"{date_str}  {time_str}"
+        datetime_ref = "Wed Feb 00  00:00:00"
+        dt_w, _ = self.glass.get_text_size(datetime_ref, mono)
+        dt_x = x + width - dt_w - 18
+        dt_y = y + (height - 20) // 2  # vertically center mono (approx 20px)
+
+        # Draw date in dim, time in cyan glow
+        date_w, _ = self.glass.get_text_size(date_str + "  ", mono)
+        draw.text((dt_x, dt_y), date_str + "  ", font=mono,
+                  fill=config.COLORS["text_dim"])
+        self.glass.draw_soft_glow_text(
+            draw, (dt_x + date_w, dt_y), time_str, mono,
+            config.COLORS["accent_cyan"]
+        )
+
+        # Subtle divider line at bottom
+        divider_color = tuple(c // 4 for c in config.COLORS["accent_cyan"][:3])
+        draw.line([(x + 10, y + height - 1), (x + width - 10, y + height - 1)],
+                  fill=divider_color, width=1)
 
     def _draw_left_panel(self, draw: ImageDraw.Draw, image: Image.Image,
                           x: int, y: int, width: int, height: int):
@@ -312,10 +380,6 @@ class DSIDisplay:
         btn_panel_h = layout["button_panel_height"]
         self._draw_button_panel(draw, x, btn_panel_y, width, btn_panel_h)
 
-        # Connection bar (below buttons) in a glass card
-        status_y = btn_panel_y + btn_panel_h + 8
-        self._draw_connection_bar(draw, x, status_y, width)
-
     def _draw_activity_feed(self, draw: ImageDraw.Draw, x: int, y: int,
                             width: int, height: int):
         """Draw the activity feed panel."""
@@ -326,13 +390,6 @@ class DSIDisplay:
         header_font = self._fonts["header"]
         draw.text((x + 18, y + 8), "ACTIVITY", font=header_font,
                   fill=config.COLORS["accent_cyan"])
-
-        # Timestamp (use fixed-width estimate for monospace)
-        time_str = datetime.now().strftime("%H:%M:%S")
-        time_font = self._fonts["mono_small"]
-        time_w, _ = self.glass.get_text_size("00:00:00", time_font)
-        draw.text((x + width - time_w - 18, y + 12), time_str,
-                  font=time_font, fill=config.COLORS["text_dim"])
 
         # Soft divider line (dimmed cyan)
         divider_color = tuple(c // 4 for c in config.COLORS["accent_cyan"][:3])

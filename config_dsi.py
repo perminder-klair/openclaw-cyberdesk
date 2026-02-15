@@ -23,6 +23,7 @@ HARDWARE_SERVER = {
     "retry_delay": 1.0,
     "endpoints": {
         "led": "/led",
+        "led_restore": "/led/restore",
         "presence": "/presence",
         "brightness": "/brightness",
         "voice_speak": "/voice/speak",
@@ -57,12 +58,13 @@ PRESENCE_BACKLIGHT = {
 LAYOUT = {
     # Overall structure
     "header_height": 0,
+    "top_bar_height": 38,
     "content_padding": 16,
 
     # Left panel (Molty + status + buttons)
     "molty_panel_width": 320,
     "molty_sprite_size": (110, 110),
-    "molty_position_y": 8,
+    "molty_position_y": 16,
     "state_label_offset_y": 128,
 
     # Button panel in left sidebar
@@ -177,16 +179,16 @@ COLORS = {
 
 # Button commands (2x4 grid in left panel)
 BUTTONS = [
+    {"id": "new_session", "label": "NEW", "command": "/new"},
+    {"id": "voice", "label": "VOICE", "command": "__voice__"},
     {"id": "inbox", "label": "INBOX", "command": "Check inbox and summarize urgent items",
      "timeout": 45, "long_press_command": "Check inbox and list ALL items with full details"},
-    {"id": "brief", "label": "BRIEF", "command": "Give me a briefing of my day", "timeout": 45},
-    {"id": "queue", "label": "QUEUE", "command": "Execute next queued automation"},
-    {"id": "focus", "label": "FOCUS", "command": "Activate focus mode"},
-    {"id": "status", "label": "STATUS", "command": "Report your current status", "timeout": 10},
-    {"id": "voice", "label": "VOICE", "command": "__voice__"},
-    {"id": "new_session", "label": "NEW", "command": "/new"},
     {"id": "tasks", "label": "TASKS", "command": "Check my Vikunja tasks and list what needs to be done today",
      "timeout": 45, "long_press_command": "Check my Vikunja tasks and give a detailed breakdown of everything due this week"},
+    {"id": "brief", "label": "BRIEF", "command": "Give me a briefing of my day", "timeout": 45},
+    {"id": "focus", "label": "FOCUS", "command": "Activate focus mode"},
+    {"id": "queue", "label": "QUEUE", "command": "Execute next queued automation"},
+    {"id": "status", "label": "STATUS", "command": "Report your current status", "timeout": 10},
 ]
 
 # Default command timeout in seconds
