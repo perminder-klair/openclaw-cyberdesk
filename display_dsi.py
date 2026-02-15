@@ -306,61 +306,10 @@ class DSIDisplay:
             glow_layers=1
         )
 
-        # Connection status
-        status_y = y + layout["connection_status_y"]
-        with self.lock:
-            connected = self._connection_status
-            model = self._model_name
-            cost = self._api_cost
-
-        # Status dot
-        dot_color = config.COLORS["neon_green"] if connected else config.COLORS["neon_red"]
-        dot_x = x + 20
-        dot_y = status_y + 8
-
-        # Glow
-        draw.ellipse([dot_x - 6, dot_y - 6, dot_x + 6, dot_y + 6],
-                     fill=(*dot_color[:3], 60))
-        draw.ellipse([dot_x - 4, dot_y - 4, dot_x + 4, dot_y + 4],
-                     fill=dot_color)
-
-        # Status text
-        status_text = "CONNECTED" if connected else "DISCONNECTED"
-        draw.text((dot_x + 12, status_y),
-                  status_text,
-                  font=self._fonts["small"],
-                  fill=config.COLORS["text_primary"] if connected else config.COLORS["text_dim"])
-
-        # Cost display
-        cost_y = y + layout["cost_display_y"]
-        cost_text = f"${cost:.4f}"
-        cost_color = config.COLORS["neon_green"] if cost < 1.0 else config.COLORS["neon_red"]
-        draw.text((x + 20, cost_y),
-                  cost_text,
-                  font=self._fonts["mono_medium"],
-                  fill=cost_color)
-
-        # Button panel (in left sidebar below status info)
+        # Button panel (in left sidebar below state label)
         btn_panel_y = y + layout["button_panel_y_offset"]
         btn_panel_h = layout["button_panel_height"]
         self._draw_button_panel(draw, x, btn_panel_y, width, btn_panel_h)
-
-        # Status text (below buttons, near bottom)
-        footer_y = y + layout["status_text_y"]
-        with self.lock:
-            status_text = self._status_text
-
-        # Cursor block
-        draw.rectangle([x + 15, footer_y + 2, x + 19, footer_y + 16],
-                       fill=config.COLORS["neon_cyan"])
-
-        # Truncate status text
-        max_status_w = width - 30
-        truncated = self._truncate_text(status_text, self._fonts["small"], max_status_w)
-        draw.text((x + 25, footer_y),
-                  truncated,
-                  font=self._fonts["small"],
-                  fill=config.COLORS["text_secondary"])
 
         # Corner accents
         self._draw_corner_accents(draw, x + 5, y + 5, width - 10, height - 10)
@@ -459,23 +408,28 @@ class DSIDisplay:
 
         draw.ellipse([dot_x - 4, dot_y - 4, dot_x + 4, dot_y + 4], fill=status_color)
 
-        # Title
         text_x = x + 12
         text_w = width - 40
-        title = self._truncate_text(entry.title, self._fonts["medium"], text_w)
-        draw.text((text_x, y + 5), title, font=self._fonts["medium"],
-                  fill=config.COLORS["text_primary"])
 
-        # Detail
-        if entry.detail:
-            detail = self._truncate_text(entry.detail, self._fonts["small"], text_w)
-            draw.text((text_x, y + 25), detail, font=self._fonts["small"],
-                      fill=config.COLORS["text_dim"])
+        # Row 1: Title (small, type-colored) + Timestamp (right-aligned)
+        title = self._truncate_text(entry.title, self._fonts["small"], text_w - 60)
+        draw.text((text_x, y + 6), title, font=self._fonts["small"], fill=bar_color)
 
-        # Timestamp
         time_str = entry.timestamp.strftime("%H:%M")
-        draw.text((text_x, y + height - 18), time_str, font=self._fonts["mono"],
-                  fill=config.COLORS["text_dim"])
+        time_bbox = self._fonts["mono"].getbbox(time_str)
+        time_w = time_bbox[2] - time_bbox[0]
+        draw.text((x + width - 30 - time_w, y + 6), time_str,
+                  font=self._fonts["mono"], fill=config.COLORS["text_dim"])
+
+        # Row 2+3: Detail text (medium, white, word-wrapped up to 2 lines)
+        if entry.detail:
+            wrapped = self._word_wrap(entry.detail, self._fonts["medium"], text_w)
+            for i, line in enumerate(wrapped[:2]):
+                if i == 1 and len(wrapped) > 2:
+                    line = self._truncate_text(line, self._fonts["medium"], text_w)
+                draw.text((text_x, y + 28 + i * 27), line,
+                          font=self._fonts["medium"],
+                          fill=config.COLORS["text_primary"])
 
     def _draw_button_panel(self, draw: ImageDraw.Draw, x: int, y: int, width: int, height: int):
         """Draw the command button panel."""

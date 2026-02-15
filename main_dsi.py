@@ -115,7 +115,6 @@ class DSICommandCenter:
                     print("[Main] Connected to OpenClaw")
                     self.display.add_activity("status", "Connected", "OpenClaw online")
                     self.display.set_molty_state(MoltyState.IDLE)
-                    self.display.set_status_text("Connected. Tap a command.")
                     self.hardware.set_led_state("connected")
                 self._was_connected = True
             elif state == ConnectionState.DISCONNECTED:
@@ -123,7 +122,6 @@ class DSICommandCenter:
                     print("[Main] Disconnected from OpenClaw")
                     self.display.add_activity("error", "Disconnected", "Connection lost")
                     self.display.set_molty_state(MoltyState.ERROR)
-                    self.display.set_status_text("Disconnected. Tap to reconnect.")
                     self.hardware.set_led_state("disconnected")
                 self._was_connected = False
             elif state == ConnectionState.RECONNECTING:
@@ -134,16 +132,13 @@ class DSICommandCenter:
         def on_message_chunk(msg_id, chunk):
             """Handle streaming message chunks."""
             self.display.set_molty_state(MoltyState.LISTENING)
-            self.display.set_status_text("Receiving response...")
 
         def on_status_update(status):
             """Handle status updates from OpenClaw."""
             if status.get("is_streaming"):
                 self.display.set_molty_state(MoltyState.WORKING)
-                self.display.set_status_text("Processing...")
             elif status.get("current_task") == "Idle":
                 self.display.set_molty_state(MoltyState.IDLE)
-                self.display.set_status_text("Waiting for commands...")
 
             # Update connection info
             self.display.set_connection_status(
@@ -159,7 +154,6 @@ class DSICommandCenter:
 
             self._set_molty_state_with_timer(MoltyState.SUCCESS, 2.0)
             self.hardware.set_led_state("success")
-            self.display.set_status_text("Done. Tap a command.")
 
             if self._active_button_id:
                 self.display.set_button_state(self._active_button_id, "success")
@@ -238,7 +232,6 @@ class DSICommandCenter:
                         "running"
                     )
                     self.display.set_molty_state(MoltyState.WORKING)
-                    self.display.set_status_text(f"Executing {button['label']}...")
                     self.hardware.set_led_state("working")
 
                     # Send command
@@ -250,7 +243,6 @@ class DSICommandCenter:
                         if self._active_button_id == active_btn:
                             print(f"[Main] Command timeout for {active_btn}")
                             self.display.set_molty_state(MoltyState.IDLE)
-                            self.display.set_status_text("No response received.")
                             self.display.update_latest_activity_status("done")
                             self.display.reset_button(active_btn)
                             self._active_button_id = None
@@ -275,10 +267,10 @@ class DSICommandCenter:
 
             else:
                 # Tap outside buttons - check for connection/cost area tap
-                if x < config.LAYOUT["molty_panel_width"] and 190 <= y <= 243:
-                    # Tapping connection status / cost area - reconnect if disconnected
+                if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT["button_panel_y_offset"]:
+                    # Tapping Molty/label area - reconnect if disconnected
                     if not self.bridge.is_connected():
-                        print("[Main] Connection area tap - forcing reconnect")
+                        print("[Main] Molty area tap - forcing reconnect")
                         self.bridge.force_reconnect()
                         self.display.add_activity("notification", "Reconnecting...", "")
                         self.display.set_molty_state(MoltyState.THINKING)
@@ -397,12 +389,10 @@ class DSICommandCenter:
             self.display.add_activity("status", "System Online", "DSI Display Active")
             self.display.add_activity("notification", "Demo Mode", "Simulated data")
             self.display.set_molty_state(MoltyState.IDLE)
-            self.display.set_status_text("Demo mode. Tap buttons to test.")
             self.display.set_connection_status(True, "demo-model", 0.0)
             self.hardware.set_led_state("idle")
         else:
             self.display.add_activity("status", "Initializing", "Connecting to OpenClaw...")
-            self.display.set_status_text("Connecting...")
 
         print("[Main] Initialization complete")
         return True

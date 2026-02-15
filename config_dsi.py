@@ -56,20 +56,17 @@ PRESENCE_BACKLIGHT = {
 # │    +────────────────+    │  [pink] Running backup                         14:22    │
 # │        "Ready"           │  [purple] Focus activated                      14:21    │
 # │                          │  [amber] Reminder                              14:20    │
-# │   ● CONNECTED            │  [cyan] Status check                           14:19    │
-# │   $0.0234                │  [red] Error detected                          14:18    │
-# │   ─────────────────────  │  [cyan] System startup                         14:17    │
-# │  +──────+ +──────+       │ ─────────────────────────────────────────────────────────│
-# │  | INBOX| | BRIEF|       │  ▌Status text...                                        │
-# │  +──────+ +──────+       └──────────────────────────────────────────────────────────┘
-# │  +──────+ +──────+       │
-# │  | QUEUE| | FOCUS|       │
-# │  +──────+ +──────+       │
-# │  +──────+ +──────+       │
-# │  |STATUS| |RANDOM|       │
-# │  +──────+ +──────+       │
-# │  ▌Status text...         │
-# └──────────────────────────┘
+# │  +──────+ +──────+       │  [cyan] Status check                           14:19    │
+# │  | INBOX| | BRIEF|       │  [red] Error detected                          14:18    │
+# │  +──────+ +──────+       │  [cyan] System startup                         14:17    │
+# │  +──────+ +──────+       │                                                          │
+# │  | QUEUE| | FOCUS|       │                                                          │
+# │  +──────+ +──────+       │                                                          │
+# │  +──────+ +──────+       │                                                          │
+# │  |STATUS| |RANDOM|       │                                                          │
+# │  +──────+ +──────+       │                                                          │
+# │                          │                                                          │
+# └──────────────────────────┴──────────────────────────────────────────────────────────┘
 
 LAYOUT = {
     # Overall structure
@@ -81,21 +78,17 @@ LAYOUT = {
     "molty_sprite_size": (130, 130),
     "molty_position_y": 8,   # Y offset from panel top
     "state_label_offset_y": 148,  # Y offset from panel top for state label
-    "connection_status_y": 190,
-    "cost_display_y": 218,
-    "status_text_y": 660,
-
     # Button panel in left sidebar
-    "button_panel_y_offset": 255,  # Where buttons start in left panel
-    "button_panel_height": 400,
+    "button_panel_y_offset": 195,  # Where buttons start in left panel
+    "button_panel_height": 260,
 
     # Right panel (activity feed uses full height)
     "activity_feed_height_ratio": 1.0,
 
     # Activity feed
     "activity_header_height": 45,
-    "activity_entry_height": 90,
-    "activity_max_visible": 7,
+    "activity_entry_height": 105,
+    "activity_max_visible": 6,
 
     # Button grid (2x3 in left panel)
     "button_cols": 2,
