@@ -29,6 +29,7 @@ logger = get_logger('audio')
 try:
     import numpy as np
     import sounddevice as sd
+    from scipy.signal import resample as scipy_resample
     AUDIO_AVAILABLE = True
 except ImportError:
     AUDIO_AVAILABLE = False
@@ -207,24 +208,13 @@ class AudioController:
         threading.Thread(target=send, daemon=True).start()
 
     def start(self):
-        """Start wake word detection loop"""
+        """Start audio controller (listen loop disabled to avoid sample rate conflicts)"""
         with self._state_lock:
             if self.running:
                 return
             self.running = True
             self.enabled = True
-
-        self.stop_event.clear()
-
-        self.listen_thread = threading.Thread(
-            target=self._wake_word_loop,
-            daemon=True
-        )
-        self.listen_thread.start()
-        if DISABLE_WAKE_WORD:
-            logger.info("Audio loop started (wake word DISABLED, manual trigger only)")
-        else:
-            logger.info("Wake word detection started")
+        logger.info("Audio controller started (listen loop disabled)")
 
     def stop(self):
         """Stop wake word detection"""
@@ -633,9 +623,29 @@ class AudioController:
                 if audio_data:
                     with self._state_lock:
                         volume = self.tts_volume
-                    audio = np.concatenate(audio_data).astype('float32') / 32767
+
+                    # Concatenate and convert int16 → float32
+                    audio = np.concatenate(audio_data).astype(np.float32) / 32768.0
                     audio = audio * (volume / 100.0)
-                    sd.play(audio, samplerate=sample_rate)
+                    audio = np.clip(audio, -1.0, 1.0)
+
+                    # Fade in/out to prevent clicks (5ms each)
+                    fade_samples = int(sample_rate * 0.005)
+                    if len(audio) > fade_samples * 2:
+                        audio[:fade_samples] *= np.linspace(0, 1, fade_samples, dtype=np.float32)
+                        audio[-fade_samples:] *= np.linspace(1, 0, fade_samples, dtype=np.float32)
+
+                    # Resample to 48kHz to match WM8960 hardware (avoids ALSA real-time resampling)
+                    hw_rate = 48000
+                    if sample_rate != hw_rate:
+                        target_len = int(len(audio) * hw_rate / sample_rate)
+                        audio = scipy_resample(audio, target_len).astype(np.float32)
+                        sample_rate = hw_rate
+
+                    # Convert mono → stereo (WM8960 is a stereo codec)
+                    audio = np.column_stack([audio, audio])
+
+                    sd.play(audio, samplerate=sample_rate, device=AUDIO_DEVICE, blocksize=4096)
                     sd.wait()
 
                 return True
@@ -677,23 +687,11 @@ class AudioController:
         }
 
     def start_listening(self, mode: str = 'assistant') -> dict:
-        """Start listening for a voice command (bypass wake word detection)."""
-        with self._state_lock:
-            if self.state != 'idle':
-                logger.warning("Force-cancelling stale state '%s' for new listen", self.state)
-                self.cancel_event.set()
-                self.state = 'idle'
-                self.last_transcript = None
-            self.recording_mode = mode
-
-        logger.info("Starting listening in %s mode", mode)
-
+        """Start listening for a voice command (currently disabled)."""
         if MOCK_MODE:
             return self.trigger_mock_wake('test command')
 
-        self.manual_listen_event.set()
-
-        return {'status': 'listening', 'mode': mode}
+        return {'error': 'Listen loop is disabled to prevent audio conflicts'}
 
     def get_tts_volume(self) -> int:
         """Get current TTS volume percentage"""
