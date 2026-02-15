@@ -3,9 +3,15 @@ NeoPixel LED Controller for WS2812B strip
 Handles color setting, animations (pulse, flash, fade, breathe)
 """
 
+import random
 import time
 import threading
 from typing import Optional, Tuple
+
+from config import LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_BRIGHTNESS, LED_INVERT, LED_CHANNEL
+from log import get_logger
+
+logger = get_logger('led')
 
 # Try to import rpi_ws281x, fall back to mock for development
 try:
@@ -13,16 +19,7 @@ try:
     MOCK_MODE = False
 except ImportError:
     MOCK_MODE = True
-    print("[LED] Running in mock mode - rpi_ws281x not available")
-
-# LED strip configuration
-LED_COUNT = 8          # Number of LED pixels (NeoPixel Stick has 8)
-LED_PIN = 10           # GPIO pin (SPI MOSI - GPIO10, frees GPIO18 for I2S audio)
-LED_FREQ_HZ = 800000   # LED signal frequency in hertz
-LED_DMA = 10           # DMA channel to use for generating signal
-LED_BRIGHTNESS = 255   # Max brightness (0-255)
-LED_INVERT = False     # True to invert the signal
-LED_CHANNEL = 0        # PWM channel
+    logger.warning("Running in mock mode - rpi_ws281x not available")
 
 
 def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
@@ -49,6 +46,9 @@ class LEDController:
         self.current_color = "#000000"
         self.current_mode = "off"
         self.current_brightness = 0
+        self._ambient_color = "#000032"    # idle blue default
+        self._ambient_mode = "static"
+        self._ambient_brightness = 100
         self.strip: Optional[PixelStrip] = None
         self.animation_thread: Optional[threading.Thread] = None
         self.stop_animation = threading.Event()
@@ -64,9 +64,9 @@ class LEDController:
                 LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
             )
             self.strip.begin()
-            print(f"[LED] Initialized {LED_COUNT} LEDs on GPIO{LED_PIN}")
+            logger.info("Initialized %d LEDs on GPIO%d", LED_COUNT, LED_PIN)
         except Exception as e:
-            print(f"[LED] Failed to initialize strip: {e}")
+            logger.error("Failed to initialize strip: %s", e)
             self.strip = None
 
     def _stop_current_animation(self):
@@ -74,7 +74,8 @@ class LEDController:
         self.stop_animation.set()
         if self.animation_thread and self.animation_thread.is_alive():
             self.animation_thread.join(timeout=1)
-        self.stop_animation.clear()
+        # Fresh Event for next animation to avoid race condition
+        self.stop_animation = threading.Event()
 
     def _set_all_pixels(self, r: int, g: int, b: int, brightness: float = 1.0):
         """Set all pixels to the same color with brightness adjustment"""
@@ -106,60 +107,58 @@ class LEDController:
             return
         self.strip.show()
 
-    def _animation_pulse(self, r: int, g: int, b: int, brightness: float):
+    def _animation_pulse(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
         """Pulsing animation - fades in and out"""
-        while not self.stop_animation.is_set():
-            # Fade in
+        while not stop_event.is_set():
             for i in range(0, 100, 5):
-                if self.stop_animation.is_set():
+                if stop_event.is_set():
                     return
                 self._set_all_pixels(r, g, b, (i / 100) * brightness)
                 time.sleep(0.05)
-            # Fade out
             for i in range(100, 0, -5):
-                if self.stop_animation.is_set():
+                if stop_event.is_set():
                     return
                 self._set_all_pixels(r, g, b, (i / 100) * brightness)
                 time.sleep(0.05)
 
-    def _animation_breathe(self, r: int, g: int, b: int, brightness: float):
+    def _animation_breathe(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
         """Gentle breathing animation - slower than pulse"""
-        while not self.stop_animation.is_set():
-            # Breathe in (slower)
+        while not stop_event.is_set():
             for i in range(20, 100, 2):
-                if self.stop_animation.is_set():
+                if stop_event.is_set():
                     return
                 self._set_all_pixels(r, g, b, (i / 100) * brightness)
                 time.sleep(0.08)
-            # Breathe out
             for i in range(100, 20, -2):
-                if self.stop_animation.is_set():
+                if stop_event.is_set():
                     return
                 self._set_all_pixels(r, g, b, (i / 100) * brightness)
                 time.sleep(0.08)
 
-    def _animation_flash(self, r: int, g: int, b: int, brightness: float):
-        """Flash 3 times then return to off"""
+    def _animation_flash(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
+        """Flash 3 times then restore to ambient"""
         for _ in range(3):
-            if self.stop_animation.is_set():
+            if stop_event.is_set():
                 return
             self._set_all_pixels(r, g, b, brightness)
             time.sleep(0.2)
             self._set_all_pixels(0, 0, 0, 0)
             time.sleep(0.2)
+        if not stop_event.is_set():
+            self.restore_ambient()
 
-    def _animation_fade(self, r: int, g: int, b: int, brightness: float):
+    def _animation_fade(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
         """Fade up from off to target brightness"""
         for i in range(0, 101, 2):
-            if self.stop_animation.is_set():
+            if stop_event.is_set():
                 return
             self._set_all_pixels(r, g, b, (i / 100) * brightness)
             time.sleep(0.03)
 
-    def _animation_rainbow(self, r: int, g: int, b: int, brightness: float):
+    def _animation_rainbow(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
         """Rotating rainbow across all pixels"""
         offset = 0
-        while not self.stop_animation.is_set():
+        while not stop_event.is_set():
             for i in range(LED_COUNT):
                 color = wheel((i * 256 // LED_COUNT + offset) % 256)
                 self._set_pixel(i, color[0], color[1], color[2], brightness)
@@ -167,12 +166,11 @@ class LEDController:
             offset = (offset + 5) % 256
             time.sleep(0.05)
 
-    def _animation_disco(self, r: int, g: int, b: int, brightness: float):
+    def _animation_disco(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
         """Random color flashes on random pixels"""
-        import random
-        while not self.stop_animation.is_set():
+        while not stop_event.is_set():
             for i in range(LED_COUNT):
-                if random.random() > 0.6:  # 40% chance to light each pixel
+                if random.random() > 0.6:
                     color = wheel(random.randint(0, 255))
                     self._set_pixel(i, color[0], color[1], color[2], brightness)
                 else:
@@ -180,10 +178,10 @@ class LEDController:
             self._show()
             time.sleep(0.1)
 
-    def _animation_chase(self, r: int, g: int, b: int, brightness: float):
+    def _animation_chase(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
         """Theater chase effect with input color"""
         pos = 0
-        while not self.stop_animation.is_set():
+        while not stop_event.is_set():
             for i in range(LED_COUNT):
                 if i == pos:
                     self._set_pixel(i, r, g, b, brightness)
@@ -193,17 +191,17 @@ class LEDController:
             pos = (pos + 1) % LED_COUNT
             time.sleep(0.08)
 
-    def _animation_gradient(self, r: int, g: int, b: int, brightness: float):
+    def _animation_gradient(self, r: int, g: int, b: int, brightness: float, stop_event: threading.Event):
         """Static gradient spread of the input color"""
         for i in range(LED_COUNT):
-            factor = 0.3 + (0.7 * i / (LED_COUNT - 1))  # 30% to 100%
+            factor = 0.3 + (0.7 * i / (LED_COUNT - 1))
             self._set_pixel(i, int(r * factor), int(g * factor), int(b * factor), brightness)
         self._show()
         # Keep running to prevent mode switch issues
-        while not self.stop_animation.is_set():
+        while not stop_event.is_set():
             time.sleep(0.5)
 
-    def set_color(self, hex_color: str, mode: str = "static", brightness: int = 100):
+    def set_color(self, hex_color: str, mode: str = "static", brightness: int = 100, ambient: bool = True):
         """
         Set LED color and mode
 
@@ -212,6 +210,7 @@ class LEDController:
             mode: Animation mode ('static', 'pulse', 'flash', 'fade', 'breathe',
                   'rainbow', 'disco', 'chase', 'gradient', 'off')
             brightness: Brightness 0-100
+            ambient: If True, also save as the resting state for restore
         """
         self._stop_current_animation()
 
@@ -219,11 +218,16 @@ class LEDController:
         self.current_mode = mode
         self.current_brightness = brightness
 
+        if ambient:
+            self._ambient_color = hex_color
+            self._ambient_mode = mode
+            self._ambient_brightness = brightness
+
         r, g, b = hex_to_rgb(hex_color)
         brightness_factor = brightness / 100
 
         if MOCK_MODE:
-            print(f"[LED Mock] Color: {hex_color}, Mode: {mode}, Brightness: {brightness}%")
+            logger.debug("Mock color: %s, mode: %s, brightness: %d%%", hex_color, mode, brightness)
             return
 
         if mode == "off":
@@ -231,7 +235,6 @@ class LEDController:
         elif mode == "static":
             self._set_all_pixels(r, g, b, brightness_factor)
         elif mode in ("pulse", "breathe", "flash", "fade", "rainbow", "disco", "chase", "gradient"):
-            # Start animation in background thread
             animation_fn = {
                 "pulse": self._animation_pulse,
                 "breathe": self._animation_breathe,
@@ -243,19 +246,28 @@ class LEDController:
                 "gradient": self._animation_gradient,
             }[mode]
 
+            # Pass current stop_event so animation thread owns it
+            stop_event = self.stop_animation
             self.animation_thread = threading.Thread(
                 target=animation_fn,
-                args=(r, g, b, brightness_factor),
+                args=(r, g, b, brightness_factor, stop_event),
                 daemon=True
             )
             self.animation_thread.start()
 
+    def restore_ambient(self):
+        """Restore LED to the saved ambient (resting) state."""
+        self.set_color(self._ambient_color, self._ambient_mode, self._ambient_brightness, ambient=False)
+
     def get_status(self) -> dict:
         """Get current LED status"""
         return {
-            "currentColor": self.current_color,
-            "currentMode": self.current_mode,
-            "currentBrightness": self.current_brightness,
+            "color": self.current_color,
+            "mode": self.current_mode,
+            "brightness": self.current_brightness,
+            "ambient_color": self._ambient_color,
+            "ambient_mode": self._ambient_mode,
+            "ambient_brightness": self._ambient_brightness,
             "online": True,
             "mock": MOCK_MODE,
         }

@@ -6,6 +6,10 @@ Handles screen brightness via /sys/class/backlight/
 import glob
 from typing import Optional
 
+from log import get_logger
+
+logger = get_logger('backlight')
+
 # Try to detect backlight device, fall back to mock for development
 BACKLIGHT_PATH: Optional[str] = None
 MOCK_MODE = True
@@ -19,13 +23,13 @@ if backlight_paths:
         with open(f"{BACKLIGHT_PATH}/max_brightness", 'r') as f:
             MAX_BRIGHTNESS = int(f.read().strip())
         MOCK_MODE = False
-        print(f"[Backlight] Found device at {BACKLIGHT_PATH}, max brightness: {MAX_BRIGHTNESS}")
+        logger.info("Found device at %s, max brightness: %d", BACKLIGHT_PATH, MAX_BRIGHTNESS)
     except (IOError, ValueError) as e:
-        print(f"[Backlight] Could not read max brightness: {e}")
+        logger.warning("Could not read max brightness: %s", e)
         MOCK_MODE = True
 
 if MOCK_MODE:
-    print("[Backlight] Running in mock mode - no backlight device available")
+    logger.warning("Running in mock mode - no backlight device available")
 
 
 class BacklightController:
@@ -43,21 +47,15 @@ class BacklightController:
                 raw_value = int(f.read().strip())
                 self.current_brightness = round((raw_value / MAX_BRIGHTNESS) * 100)
         except (IOError, ValueError) as e:
-            print(f"[Backlight] Failed to read brightness: {e}")
+            logger.error("Failed to read brightness: %s", e)
 
     def set_brightness(self, brightness: int):
-        """
-        Set screen brightness
-
-        Args:
-            brightness: Brightness percentage 0-100
-        """
-        # Clamp to valid range (min 10% to avoid black screen)
+        """Set screen brightness (0-100, min 10% to avoid black screen)"""
         brightness = max(10, min(100, int(brightness)))
         self.current_brightness = brightness
 
         if MOCK_MODE:
-            print(f"[Backlight Mock] Brightness: {brightness}%")
+            logger.debug("Mock brightness: %d%%", brightness)
             return
 
         if not BACKLIGHT_PATH:
@@ -69,10 +67,10 @@ class BacklightController:
         try:
             with open(f"{BACKLIGHT_PATH}/brightness", 'w') as f:
                 f.write(str(raw_value))
-            print(f"[Backlight] Set to {brightness}% ({raw_value}/{MAX_BRIGHTNESS})")
+            logger.info("Set to %d%% (%d/%d)", brightness, raw_value, MAX_BRIGHTNESS)
         except IOError as e:
-            print(f"[Backlight] Failed to set brightness: {e}")
-            print("[Backlight] Tip: Run with sudo or add udev rule for permissions")
+            logger.error("Failed to set brightness: %s", e)
+            logger.error("Tip: Run with sudo or add udev rule for permissions")
 
     def get_brightness(self) -> int:
         """Get current brightness percentage"""

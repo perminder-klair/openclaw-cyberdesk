@@ -7,6 +7,10 @@ import subprocess
 import re
 from typing import Optional, Tuple
 
+from log import get_logger
+
+logger = get_logger('volume')
+
 # Try to detect WM8960 sound card
 SOUND_CARD: Optional[int] = None
 MOCK_MODE = True
@@ -32,7 +36,7 @@ def _detect_wm8960_card() -> Tuple[Optional[int], Optional[str]]:
                     device_name = name_match.group(1).strip() if name_match else 'WM8960'
                     return card_num, device_name
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-        print(f"[Volume] Could not detect sound card: {e}")
+        logger.warning("Could not detect sound card: %s", e)
     return None, None
 
 
@@ -40,9 +44,9 @@ def _detect_wm8960_card() -> Tuple[Optional[int], Optional[str]]:
 SOUND_CARD, DEVICE_NAME = _detect_wm8960_card()
 if SOUND_CARD is not None:
     MOCK_MODE = False
-    print(f"[Volume] Found WM8960 at card {SOUND_CARD}: {DEVICE_NAME}")
+    logger.info("Found WM8960 at card %d: %s", SOUND_CARD, DEVICE_NAME)
 else:
-    print("[Volume] Running in mock mode - no WM8960 device available")
+    logger.warning("Running in mock mode - no WM8960 device available")
 
 
 class VolumeController:
@@ -63,9 +67,13 @@ class VolumeController:
                 text=True,
                 timeout=5
             )
+            if result.returncode != 0:
+                logger.error("amixer returned non-zero exit code %d: %s",
+                             result.returncode, result.stderr.strip())
+                return None
             return result.stdout
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-            print(f"[Volume] amixer command failed: {e}")
+            logger.error("amixer command failed: %s", e)
             return None
 
     def _parse_volume(self, output: str) -> Tuple[int, bool]:
@@ -92,45 +100,34 @@ class VolumeController:
         output = self._run_amixer(['sget', 'Speaker'])
         if output:
             self.current_volume, self.muted = self._parse_volume(output)
-            print(f"[Volume] Current: {self.current_volume}%, muted: {self.muted}")
+            logger.info("Current: %d%%, muted: %s", self.current_volume, self.muted)
 
     def set_volume(self, volume: int):
-        """
-        Set system volume
-
-        Args:
-            volume: Volume percentage 0-100
-        """
-        # Clamp to valid range
+        """Set system volume (0-100)"""
         volume = max(0, min(100, int(volume)))
         self.current_volume = volume
 
         if MOCK_MODE:
-            print(f"[Volume Mock] Volume: {volume}%")
+            logger.debug("Mock volume: %d%%", volume)
             return
 
         # Set both Speaker and Headphone for WM8960
         self._run_amixer(['sset', 'Speaker', f'{volume}%'])
         self._run_amixer(['sset', 'Headphone', f'{volume}%'])
-        print(f"[Volume] Set to {volume}%")
+        logger.info("Set to %d%%", volume)
 
     def set_muted(self, muted: bool):
-        """
-        Set mute state
-
-        Args:
-            muted: True to mute, False to unmute
-        """
+        """Set mute state"""
         self.muted = muted
 
         if MOCK_MODE:
-            print(f"[Volume Mock] Muted: {muted}")
+            logger.debug("Mock muted: %s", muted)
             return
 
         state = 'off' if muted else 'on'
         self._run_amixer(['sset', 'Speaker', state])
         self._run_amixer(['sset', 'Headphone', state])
-        print(f"[Volume] Muted: {muted}")
+        logger.info("Muted: %s", muted)
 
     def get_volume(self) -> int:
         """Get current volume percentage"""
