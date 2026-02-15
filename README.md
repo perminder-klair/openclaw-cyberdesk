@@ -1,6 +1,6 @@
 # OpenClaw Display
 
-A dual SPI display command center for Raspberry Pi 4, designed as a physical dashboard for [OpenClaw](https://github.com/openclawai/openclaw) AI agents. Features a cyberpunk-themed UI with Molty the space lobster mascot.
+A 7" DSI touchscreen command center for Raspberry Pi 4, designed as a physical dashboard for [OpenClaw](https://github.com/openclawai/openclaw) AI agents. Features a unified cyberpunk-themed UI with Molty the space lobster mascot, activity feed, and touch-enabled command buttons.
 
 [![Watch the video](https://img.youtube.com/vi/Pq3205RoOsI/maxresdefault.jpg)](https://www.youtube.com/watch?v=Pq3205RoOsI)
 
@@ -14,88 +14,67 @@ A dual SPI display command center for Raspberry Pi 4, designed as a physical das
 | Part | Description | Qty |
 |------|-------------|-----|
 | Raspberry Pi 4 | Any RAM variant (2GB+) | 1 |
-| ILI9488 3.5" TFT | 480x320 SPI display (main conversation view) | 1 |
-| ILI9341 2.4" TFT | 320x240 SPI display with XPT2046 touch (command panel) | 1 |
-| KY-040 Rotary Encoder | With push button, for menu navigation | 1 |
-| 1602 I2C LCD | 16x2 character display with PCF8574 backpack (I2C address 0x27) | 1 |
-| Jumper wires | Female-to-female dupont wires | ~30 |
+| 7" DSI Touchscreen | 1280x720 capacitive touch display with DSI ribbon cable | 1 |
 | Micro SD card | 16GB+ with Raspberry Pi OS | 1 |
 | USB-C power supply | 5V 3A for Raspberry Pi 4 | 1 |
 
-The ILI9341 modules with built-in XPT2046 touch are common on Amazon/AliExpress as a single board - look for "2.4 inch TFT SPI touch screen ILI9341 XPT2046". The touch controller shares the SPI bus with the display and has its own CS pin.
+**Optional Hardware Server Components:**
+| Part | Description | Qty |
+|------|-------------|-----|
+| RGB LED | WS2812B or similar for status indication | 1 |
+| VL53L0X Sensor | Time-of-Flight proximity sensor for presence detection | 1 |
+
+The 7" DSI touchscreen connects directly to the Raspberry Pi's DSI port via ribbon cable. Look for "Raspberry Pi 7 inch Display" or compatible DSI touchscreens (many include official case mounting hardware).
+
+**Hardware Server:** The optional LED and proximity sensor require a separate hardware server running at `localhost:5000`. The display gracefully degrades if the hardware server is unavailable.
 
 ## Wiring
 
-### SPI Displays (SPI0)
+### DSI Display Connection
 
-Both displays share the SPI0 bus (MOSI on GPIO 10, SCLK on GPIO 11, MISO on GPIO 9).
+The 7" DSI touchscreen connects to the Raspberry Pi 4 via:
+1. **DSI ribbon cable** - connects to DSI port (between HDMI ports)
+2. **Power jumpers** (optional) - 5V and GND from GPIO header to display board
 
-**Large display (ILI9488) - uses CE0:**
+No additional wiring required for display or touch functionality.
 
-| Display Pin | Pi GPIO | Pi Physical Pin |
-|-------------|---------|-----------------|
-| VCC | 3.3V | 1 |
-| GND | GND | 6 |
-| CS | CE0 (GPIO 8) | 24 |
-| DC | GPIO 24 | 18 |
-| RST | GPIO 25 | 22 |
-| MOSI | GPIO 10 | 19 |
-| SCLK | GPIO 11 | 23 |
+### Optional Hardware Server Components
 
-**Small display (ILI9341) - uses CE1:**
+If using the hardware server for LED status and presence detection:
 
-| Display Pin | Pi GPIO | Pi Physical Pin |
-|-------------|---------|-----------------|
-| VCC | 3.3V | 17 |
-| GND | GND | 20 |
-| CS | CE1 (GPIO 7) | 26 |
-| DC | GPIO 22 | 15 |
-| RST | GPIO 27 | 13 |
-| BL | GPIO 23 | 16 |
-| MOSI | GPIO 10 | 19 |
-| SCLK | GPIO 11 | 23 |
+**RGB LED (WS2812B/NeoPixel):**
+| LED Pin | Pi GPIO | Pi Physical Pin |
+|---------|---------|-----------------|
+| VCC | 5V | 2 or 4 |
+| GND | GND | 6 or 9 |
+| DIN | GPIO 18 (PWM) | 12 |
 
-### Touch Controller (XPT2046)
-
-The touch controller is built into the ILI9341 module. It shares the SPI0 bus but uses a separate CS pin controlled via GPIO (not a hardware CE line).
-
-| Touch Pin | Pi GPIO | Pi Physical Pin |
-|-----------|---------|-----------------|
-| T_CS | GPIO 17 | 11 |
-| T_CLK | GPIO 11 (SCLK) | 23 |
-| T_DIN | GPIO 10 (MOSI) | 19 |
-| T_DO | GPIO 9 (MISO) | 21 |
-
-The T_IRQ pin on the module is not used - touch detection is done via polling (reading pressure Z value > 300).
-
-### Rotary Encoder (KY-040)
-
-| Encoder Pin | Pi GPIO | Pi Physical Pin |
-|-------------|---------|-----------------|
-| CLK | GPIO 5 | 29 |
-| DT | GPIO 6 | 31 |
-| SW | GPIO 13 | 33 |
-| + | 3.3V | 1 |
-| GND | GND | 34 |
-
-### I2C LCD (1602 + PCF8574)
-
-| LCD Pin | Pi Pin | Pi Physical Pin |
-|---------|--------|-----------------|
+**VL53L0X Proximity Sensor (I2C):**
+| Sensor Pin | Pi Pin | Pi Physical Pin |
+|------------|--------|-----------------|
+| VCC | 3.3V | 1 or 17 |
+| GND | GND | 6 or 9 |
 | SDA | GPIO 2 (SDA1) | 3 |
 | SCL | GPIO 3 (SCL1) | 5 |
-| VCC | 5V | 2 |
-| GND | GND | 9 |
-
-> **Note:** The LCD uses 5V for power but the Pi's I2C lines are 3.3V. The PCF8574 backpack handles level shifting - this is normal and safe.
 
 ### Assembly Tips
 
-1. **Enable SPI and I2C** on your Pi: `sudo raspi-config` → Interface Options → enable SPI and I2C
-2. **Wire the SPI bus first** (MOSI, MISO, SCLK) since all three SPI devices share it
-3. **Double-check CS pins** - the two displays use hardware CE0/CE1, but the touch controller uses a manual GPIO CS (GPIO 17). Mixing these up will cause bus conflicts
-4. **Test incrementally** - wire and test one display at a time using `python main.py --demo` before adding the next peripheral
-5. The rotary encoder and LCD are optional - the system works without them (gracefully degrades)
+1. **Enable DSI Display:**
+   - Connect DSI ribbon cable to Pi's DSI port
+   - Boot the Pi - display should initialize automatically
+   - If needed, configure in `/boot/config.txt` (usually auto-detected)
+
+2. **Enable I2C** (if using hardware server):
+   - Run `sudo raspi-config` → Interface Options → enable I2C
+
+3. **Test Display:**
+   - DSI display should show desktop after boot
+   - Verify touch works by tapping desktop icons
+
+4. **Optional Hardware Server:**
+   - Set up hardware server with LED and/or proximity sensor
+   - Run server on port 5000
+   - Display will connect automatically if available
 
 ## Installation
 
@@ -128,11 +107,21 @@ OPENCLAW_AUTO_RECONNECT=true
 
 ```bash
 # Run the full display system (connects to OpenClaw)
-python main.py
+python main_dsi.py
 
 # Demo mode (no server connection required)
-python main.py --demo
+python main_dsi.py --demo
+
+# Windowed mode (not fullscreen)
+python main_dsi.py --windowed
+
+# Custom OpenClaw URL
+python main_dsi.py --url wss://your-server:18789
 ```
+
+**Keyboard Controls:**
+- `ESC` or `Q` - Exit application
+- Touch interactions handled via touchscreen
 
 ## Running as a Service
 
@@ -216,8 +205,24 @@ ls -la /home/klair/Projects/OpenClaw-CyberDeck/.venv/bin/python
 
 **Service starts but display is black:**
 - Check hardware connections
-- Verify SPI is enabled: `ls /dev/spidev0.*`
+- Verify DSI display is connected and powered
 - Run manually to see detailed errors: `./venv/bin/python main_dsi.py`
+
+**Display shows black screen or "No signal":**
+- Verify DSI ribbon cable is firmly seated in both connectors
+- Check `/boot/config.txt` for display settings (usually auto-detected)
+- Test with `tvservice -s` to see display status
+- Try HDMI output first to verify Pi is booting
+
+**Touch not working:**
+- DSI touchscreens with capacitive touch work automatically via Pygame
+- Check `dmesg | grep -i touch` for touch device detection
+- Run `python main_dsi.py --demo --windowed` and try mouse clicks
+
+**Hardware server not connecting:**
+- Verify server is running: `curl http://localhost:5000/presence`
+- Display works without hardware server (no LED/presence features)
+- Check hardware server logs for I2C or GPIO errors
 
 **Want to run manually while service is enabled:**
 ```bash
@@ -236,18 +241,50 @@ python main_dsi.py
 
 | Module | Description |
 |--------|-------------|
-| `main.py` | Entry point - coordinates displays, touch, and OpenClaw bridge |
-| `display_main.py` | Large display renderer (conversation view with Molty) |
-| `display_status.py` | Small display renderer (cyberpunk command panel) |
-| `touch_handler.py` | XPT2046 touch input with calibration and debounce |
-| `rotary_handler.py` | KY-040 rotary encoder for menu navigation |
-| `lcd_ticker.py` | 16x2 I2C LCD scrolling status ticker |
-| `websocket_client.py` | OpenClaw WebSocket client with Ed25519 auth |
+| `main_dsi.py` | Entry point - coordinates display, touch, and OpenClaw bridge |
+| `display_dsi.py` | Unified display renderer (Molty + activity feed + command buttons) |
+| `touch_dsi.py` | Touch handler using Pygame events (tap, long press detection) |
+| `hardware_client.py` | HTTP client for hardware server (LED, presence, brightness) |
+| `config_dsi.py` | DSI display and hardware server configuration |
+| `websocket_client.py` | OpenClaw WebSocket client with Ed25519 authentication |
 | `openclaw_bridge.py` | Bridge between OpenClaw events and display updates |
 | `openclaw_config.py` | Configuration loader (.env + defaults) |
-| `config.py` | Hardware pin definitions and display settings |
-| `spi_lock.py` | SPI bus mutex for shared bus access |
 | `ui/` | UI components (activity feed, command panel, cyberpunk theme, Molty renderer) |
+
+**Legacy Files (dual SPI version - not in active use):**
+- `main.py`, `config.py`, `display_main.py`, `display_status.py`
+- `touch_handler.py`, `rotary_handler.py`, `lcd_ticker.py`, `spi_lock.py`
+
+## Hardware Server (Optional)
+
+The DSI display can integrate with a hardware server for enhanced features:
+
+**Features:**
+- RGB LED status indication (idle/working/success/error states)
+- VL53L0X proximity-based backlight dimming
+- TTS voice notifications (optional)
+
+**Setup:**
+```bash
+# Example setup (adjust to your hardware server implementation)
+cd ~/Projects
+git clone <your-hardware-server-repo>
+cd hardware-server
+
+# Install dependencies
+pip install flask gpiozero adafruit-circuitpython-vl53l0x
+
+# Run server
+python server.py
+```
+
+**Endpoints:**
+- `GET /presence` - Returns current proximity zone (near/medium/far/away)
+- `POST /led` - Set LED color and mode (static/pulse/flash)
+- `POST /brightness` - Set display brightness (0-255)
+- `POST /voice/speak` - TTS output (requires pyttsx3 or espeak)
+
+The display gracefully degrades if hardware server is unavailable.
 
 ## License
 

@@ -48,49 +48,58 @@ PRESENCE_BACKLIGHT = {
     "poll_interval": 1.0,         # seconds
 }
 
-# Unified Layout (1280x720)
-# ┌──────────────────────────────────────────────────────────────────────────────────────┐
-# │  OPENCLAW                                                           12:34  WORKING   │  <- Header (60px)
-# ├──────────────────────────┬───────────────────────────────────────────────────────────┤
-# │                          │  ACTIVITY FEED                                             │
-# │         MOLTY            │  ┌──────────────────────────────────────────────────────┐  │
-# │        (180x180)         │  │ [cyan] Checked inbox - 3 urgent                14:23 │  │
-# │                          │  │ [pink] Running backup...                       14:22 │  │
-# │        [STATE]           │  └──────────────────────────────────────────────────────┘  │
-# │                          ├───────────────────────────────────────────────────────────┤
-# │      ● CONNECTED         │  ┌──────────┐  ┌──────────┐  ┌──────────┐                 │
-# │      $0.0234             │  │  INBOX   │  │  BRIEF   │  │  QUEUE   │                 │
-# │                          │  └──────────┘  └──────────┘  └──────────┘                 │
-# │      ▌Status...          │  ┌──────────┐  ┌──────────┐  ┌──────────┐                 │
-# │                          │  │  FOCUS   │  │  STATUS  │  │  RANDOM  │                 │
-# └──────────────────────────┴──┴──────────┴──┴──────────┴──┴──────────┴─────────────────┘
+# Unified Layout (1280x720) - No header, buttons in left panel
+# ┌──────────────────────────┬──────────────────────────────────────────────────────────┐
+# │                          │  ACTIVITY                                        14:32   │
+# │    +─── 130x130 ───+    │ ─────────────────────────────────────────────────────────│
+# │    │     MOLTY      │    │  [cyan] Checked inbox                          14:23    │
+# │    +────────────────+    │  [pink] Running backup                         14:22    │
+# │        "Ready"           │  [purple] Focus activated                      14:21    │
+# │                          │  [amber] Reminder                              14:20    │
+# │   ● CONNECTED            │  [cyan] Status check                           14:19    │
+# │   $0.0234                │  [red] Error detected                          14:18    │
+# │   ─────────────────────  │  [cyan] System startup                         14:17    │
+# │  +──────+ +──────+       │ ─────────────────────────────────────────────────────────│
+# │  | INBOX| | BRIEF|       │  ▌Status text...                                        │
+# │  +──────+ +──────+       └──────────────────────────────────────────────────────────┘
+# │  +──────+ +──────+       │
+# │  | QUEUE| | FOCUS|       │
+# │  +──────+ +──────+       │
+# │  +──────+ +──────+       │
+# │  |STATUS| |RANDOM|       │
+# │  +──────+ +──────+       │
+# │  ▌Status text...         │
+# └──────────────────────────┘
 
 LAYOUT = {
     # Overall structure
-    "header_height": 60,
+    "header_height": 0,
     "content_padding": 16,
 
-    # Left panel (Molty + status)
+    # Left panel (Molty + status + buttons)
     "molty_panel_width": 320,
-    "molty_sprite_size": (180, 180),
-    "molty_position_y": 90,   # Y offset from panel top
-    "state_label_offset_y": 210,  # Y offset from panel top for state label
-    "connection_status_y": 300,
-    "cost_display_y": 338,
-    "status_text_y": 390,
+    "molty_sprite_size": (130, 130),
+    "molty_position_y": 8,   # Y offset from panel top
+    "state_label_offset_y": 148,  # Y offset from panel top for state label
+    "connection_status_y": 190,
+    "cost_display_y": 218,
+    "status_text_y": 660,
 
-    # Right panel split
-    "activity_feed_height_ratio": 0.55,  # 55% for activity feed
-    "button_panel_height_ratio": 0.45,   # 45% for buttons
+    # Button panel in left sidebar
+    "button_panel_y_offset": 255,  # Where buttons start in left panel
+    "button_panel_height": 400,
+
+    # Right panel (activity feed uses full height)
+    "activity_feed_height_ratio": 1.0,
 
     # Activity feed
     "activity_header_height": 45,
     "activity_entry_height": 90,
-    "activity_max_visible": 4,
+    "activity_max_visible": 7,
 
-    # Button grid (3x2)
-    "button_cols": 3,
-    "button_rows": 2,
+    # Button grid (2x3 in left panel)
+    "button_cols": 2,
+    "button_rows": 3,
     "button_gap": 16,
     "button_padding": 24,
 }
@@ -123,7 +132,7 @@ COLORS = {
     "text_secondary": (100, 150, 150),
 }
 
-# Button commands (same as original, but 3x2 grid)
+# Button commands (2x3 grid in left panel)
 BUTTONS = [
     {"id": "inbox", "label": "INBOX", "command": "Check inbox and summarize urgent items"},
     {"id": "brief", "label": "BRIEF", "command": "Give me a briefing of my day"},

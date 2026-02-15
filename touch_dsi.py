@@ -271,19 +271,11 @@ class ButtonHitTester:
         layout = self.layout
         screen_w, screen_h = self.screen_size
 
-        # Button panel area
-        molty_panel_w = layout["molty_panel_width"]
-        header_h = layout["header_height"]
-        content_h = screen_h - header_h
-
-        # Activity feed takes top portion of right panel
-        activity_h = int(content_h * layout["activity_feed_height_ratio"])
-
-        # Button panel starts after activity feed
-        button_panel_x = molty_panel_w
-        button_panel_y = header_h + activity_h
-        button_panel_w = screen_w - molty_panel_w
-        button_panel_h = content_h - activity_h
+        # Button panel in left sidebar
+        button_panel_x = 0
+        button_panel_y = layout["button_panel_y_offset"]
+        button_panel_w = layout["molty_panel_width"]
+        button_panel_h = layout["button_panel_height"]
 
         # Calculate button sizes
         padding = layout["button_padding"]

@@ -185,15 +185,13 @@ class DSIDisplay:
         """Find the activity entry at the given tap coordinates."""
         layout = config.LAYOUT
         molty_panel_w = layout["molty_panel_width"]
-        header_h = layout["header_height"]
         right_x = molty_panel_w
         right_w = self.width - molty_panel_w
-        content_h = self.height - header_h
-        activity_h = int(content_h * layout["activity_feed_height_ratio"])
+        activity_h = self.height  # Full height
 
         # Activity feed bounds
         feed_x = right_x
-        feed_y = header_h
+        feed_y = 0
         feed_w = right_w
 
         # Entries start after activity header
@@ -249,27 +247,14 @@ class DSIDisplay:
 
         layout = config.LAYOUT
         molty_panel_w = layout["molty_panel_width"]
-        header_h = layout["header_height"]
 
-        # Draw header
-        self._draw_header(draw, 0, 0, self.width, header_h)
+        # Draw left panel (Molty + status + buttons)
+        self._draw_left_panel(draw, image, 0, 0, molty_panel_w, self.height)
 
-        # Draw left panel (Molty)
-        self._draw_molty_panel(draw, image, 0, header_h, molty_panel_w, self.height - header_h)
-
-        # Draw right panel (activity feed + buttons)
+        # Draw right panel (activity feed - full height)
         right_x = molty_panel_w
         right_w = self.width - molty_panel_w
-        content_h = self.height - header_h
-
-        activity_h = int(content_h * layout["activity_feed_height_ratio"])
-        button_h = content_h - activity_h
-
-        # Activity feed
-        self._draw_activity_feed(draw, right_x, header_h, right_w, activity_h)
-
-        # Button panel
-        self._draw_button_panel(draw, right_x, header_h + activity_h, right_w, button_h)
+        self._draw_activity_feed(draw, right_x, 0, right_w, self.height)
 
         # Overlay (drawn on top of all panels)
         with self.lock:
@@ -282,56 +267,9 @@ class DSIDisplay:
 
         return image
 
-    def _draw_header(self, draw: ImageDraw.Draw, x: int, y: int, width: int, height: int):
-        """Draw the header bar."""
-        # Background
-        draw.rectangle([x, y, x + width, y + height], fill=config.COLORS["panel_bg"])
-
-        # Title
-        self.theme.draw_neon_text(
-            draw, (x + 15, y + 8),
-            "OPENCLAW",
-            self._fonts["title"],
-            config.COLORS["neon_cyan"],
-            glow_layers=1
-        )
-
-        # Timestamp
-        time_str = datetime.now().strftime("%H:%M")
-        time_bbox = self._fonts["mono_medium"].getbbox(time_str)
-        time_w = time_bbox[2] - time_bbox[0]
-        draw.text(
-            (x + width - time_w - 120, y + 10),
-            time_str,
-            font=self._fonts["mono_medium"],
-            fill=config.COLORS["text_dim"]
-        )
-
-        # Current state label
-        with self.lock:
-            state_label = self.molty.get_state_label()
-            state_color = self.molty.get_state_color()
-
-        state_bbox = self._fonts["header"].getbbox(state_label)
-        state_w = state_bbox[2] - state_bbox[0]
-        self.theme.draw_neon_text(
-            draw, (x + width - state_w - 15, y + 10),
-            state_label.upper(),
-            self._fonts["header"],
-            state_color,
-            glow_layers=1
-        )
-
-        # Bottom border
-        draw.line(
-            [(x, y + height - 1), (x + width, y + height - 1)],
-            fill=config.COLORS["neon_cyan"],
-            width=2
-        )
-
-    def _draw_molty_panel(self, draw: ImageDraw.Draw, image: Image.Image,
+    def _draw_left_panel(self, draw: ImageDraw.Draw, image: Image.Image,
                           x: int, y: int, width: int, height: int):
-        """Draw the left Molty panel."""
+        """Draw the left panel with Molty, status, and buttons."""
         layout = config.LAYOUT
 
         # Background
@@ -402,7 +340,12 @@ class DSIDisplay:
                   font=self._fonts["mono_medium"],
                   fill=cost_color)
 
-        # Status text
+        # Button panel (in left sidebar below status info)
+        btn_panel_y = y + layout["button_panel_y_offset"]
+        btn_panel_h = layout["button_panel_height"]
+        self._draw_button_panel(draw, x, btn_panel_y, width, btn_panel_h)
+
+        # Status text (below buttons, near bottom)
         footer_y = y + layout["status_text_y"]
         with self.lock:
             status_text = self._status_text
@@ -641,13 +584,13 @@ class DSIDisplay:
             draw.line([corners[i+1][:2], corners[i+1][2:4]], fill=style["border"], width=3)
 
         # Label
-        label_bbox = self._fonts["large"].getbbox(label)
+        label_bbox = self._fonts["medium"].getbbox(label)
         label_w = label_bbox[2] - label_bbox[0]
         label_h = label_bbox[3] - label_bbox[1]
         label_x = x + (width - label_w) // 2
         label_y = y + (height - label_h) // 2 - 2
 
-        draw.text((label_x, label_y), label, font=self._fonts["large"], fill=style["text"])
+        draw.text((label_x, label_y), label, font=self._fonts["medium"], fill=style["text"])
 
     def _draw_corner_accents(self, draw: ImageDraw.Draw, x: int, y: int, width: int, height: int):
         """Draw corner accent marks."""

@@ -1,62 +1,84 @@
-# Display Project
+# OpenClaw CyberDeck - DSI Display Edition
 
-Dual display system with touchscreen control on Raspberry Pi 4.
+Single 7" DSI touchscreen command center for Raspberry Pi 4 with unified cyberpunk UI.
 
 ## Hardware
 
-### Large Display (ILI9488 480x320)
-- 18-bit color mode
-- SPI bus 0, CE0
-- GPIO pins: DC=24, RST=25
-- SPI speed: 16MHz
+### DSI Display (7" Touchscreen)
+- Resolution: 1280x720 (auto-detected at runtime)
+- Interface: DSI (Display Serial Interface)
+- Touch: Integrated capacitive touch via Pygame/SDL2 events
+- Rendering: PIL for graphics, converted to Pygame surface
+- Frame rate: 30 FPS (configurable)
 
-### Small Display (ILI9341 320x240)
-- 16-bit color mode (RGB565)
-- SPI bus 0, CE1
-- GPIO pins: DC=22, RST=27, BL=23
-- SPI speed: 16MHz
+### Hardware Server Integration (Optional)
+- Endpoint: http://localhost:5000
+- LED control for status indication:
+  - Idle: Dim blue (RGB 0,0,50)
+  - Working: Amber pulse (RGB 255,170,0)
+  - Success: Green flash (RGB 0,255,0)
+  - Error: Red flash (RGB 255,0,0)
+- Presence detection with proximity-based brightness control:
+  - **Near** (<50cm): Brightness 255 - at the display
+  - **Medium** (50-100cm): Brightness 200 - leaned back
+  - **Far** (>100cm): Brightness 80 - stepped away
+  - **Away** (not detected): Brightness 30 - very dim
+- TTS voice support (optional)
 
-### Touch Controller (XPT2046)
-- Polling mode (IRQ pin not connected)
-- Manual CS via GPIO 17
-- SPI speed: 1.5MHz
-- Shares SPI bus 0 with large display (requires SPI settings restore)
+### Display Layout
 
-## Touch Calibration
+Unified 1280x720 screen, no header bar. Two panels:
 
-Calibrated values (axes are swapped, both inverted):
-- X range: 572-3676 (inverted)
-- Y range: 777-3476 (inverted)
-- Swap X/Y before mapping
-- Pressure threshold: Z > 300
+**Left Panel (320px):**
+- Molty character sprite (130x130)
+- State indicator (IDLE/WORKING/LISTENING/THINKING/SUCCESS/ERROR)
+- Connection status and API cost
+- Command buttons: 2x3 grid (INBOX, BRIEF, QUEUE, FOCUS, STATUS, RANDOM)
+- Status text at bottom
 
-## Pin Mapping
+**Right Panel (960px):**
+- Activity Feed (full height): Up to 7 recent activities with timestamps
 
-| Function | GPIO | Physical Pin |
-|----------|------|--------------|
-| Large DC | 24 | 18 |
-| Large RST | 25 | 22 |
-| Small DC | 22 | 15 |
-| Small RST | 27 | 13 |
-| Small BL | 23 | 16 |
-| Small CS | 7 | 26 |
-| Touch CS | 17 | 11 |
-| Touch IRQ | 4 | 7 (not used) |
+## Hardware Server Endpoints
+
+The display communicates with an optional hardware server at localhost:5000:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| /led | POST | LED control (r, g, b, mode, duration) |
+| /presence | GET | Current presence zone (near/medium/far/away) |
+| /brightness | POST | Set display brightness (0-255) |
+| /voice/speak | POST | Text-to-speech (text, priority) |
+
+LED modes: `static`, `pulse`, `flash`
+
+Display gracefully degrades if hardware server is unavailable.
 
 ## Key Files
 
-- `main.py` - Entry point, coordinates displays, touch, and OpenClaw bridge
-- `display_main.py` - Large display renderer (conversation view)
-- `display_status.py` - Small display renderer (command panel)
-- `touch_handler.py` - XPT2046 touch input with calibration
-- `config.py` - Hardware pin definitions and display settings
+- `main_dsi.py` - Entry point for DSI display system
+- `display_dsi.py` - Unified display renderer (Molty + activity feed + buttons)
+- `touch_dsi.py` - Touch handler using Pygame events (tap, long press)
+- `config_dsi.py` - DSI display and hardware server configuration
+- `hardware_client.py` - HTTP client for LED and presence control
+- `websocket_client.py` - OpenClaw WebSocket client with Ed25519 auth
+- `openclaw_bridge.py` - Bridge between OpenClaw events and display updates
+- `openclaw_config.py` - Configuration loader (.env + defaults)
+
+## Touch Interaction
+
+- **Tap**: Activate buttons, select activity entries for detail view
+- **Long Press** (500ms): Cancel current operation or force reconnect
+- **Connection Area Tap**: Tap connection/cost area in left panel to reconnect if disconnected
+- **Molty Area Long Press**: Long press above buttons in left panel to force reconnect
+- Debounce: 100ms
 
 ## Notes
 
-- Touch uses polling (checks pressure Z value) since IRQ isn't wired
-- Large display SPI settings must be restored after touch reads (they share bus 0)
-- Tap detection uses state transition (not-touched → touched) for instant response
-- Debounce: 100ms
+- Screen resolution auto-detected at runtime (supports actual hardware resolution)
+- Fullscreen mode by default (disable with `--windowed` flag)
+- Pygame event-based touch handling (FINGERDOWN/FINGERUP or MOUSEBUTTONDOWN/UP)
+- Hardware server runs separately - display gracefully degrades if unavailable
 
 ## OpenClaw WebSocket Protocol
 

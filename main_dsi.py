@@ -274,11 +274,11 @@ class DSICommandCenter:
                     self.hardware.set_led_state("error")
 
             else:
-                # Tap outside buttons - check for status bar tap
-                if y < config.LAYOUT["header_height"]:
-                    # Header tap - try to reconnect if disconnected
+                # Tap outside buttons - check for connection/cost area tap
+                if x < config.LAYOUT["molty_panel_width"] and 190 <= y <= 243:
+                    # Tapping connection status / cost area - reconnect if disconnected
                     if not self.bridge.is_connected():
-                        print("[Main] Header tap - forcing reconnect")
+                        print("[Main] Connection area tap - forcing reconnect")
                         self.bridge.force_reconnect()
                         self.display.add_activity("notification", "Reconnecting...", "")
                         self.display.set_molty_state(MoltyState.THINKING)
@@ -292,9 +292,9 @@ class DSICommandCenter:
                 self.display.dismiss_overlay()
                 return
 
-            if y < config.LAYOUT["header_height"]:
-                # Long press on header - force reconnect
-                print("[Main] Header long press - forcing reconnect")
+            if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT["button_panel_y_offset"]:
+                # Long press on Molty/status area (above buttons) - force reconnect
+                print("[Main] Molty area long press - forcing reconnect")
                 self.bridge.force_reconnect()
             else:
                 # Long press elsewhere - cancel current operation
