@@ -71,7 +71,7 @@ PRESENCE_BACKLIGHT = {
 # │  |STATUS| |VOICE |       │                                                          │
 # │  +──────+ +──────+       │                                                          │
 # │  +──────+ +──────+       │                                                          │
-# │  | NEW  | |      |       │                                                          │
+# │  | NEW  | |TASKS |       │                                                          │
 # │  +──────+ +──────+       │                                                          │
 # └──────────────────────────┴──────────────────────────────────────────────────────────┘
 
@@ -134,14 +134,20 @@ COLORS = {
 
 # Button commands (2x4 grid in left panel)
 BUTTONS = [
-    {"id": "inbox", "label": "INBOX", "command": "Check inbox and summarize urgent items"},
-    {"id": "brief", "label": "BRIEF", "command": "Give me a briefing of my day"},
+    {"id": "inbox", "label": "INBOX", "command": "Check inbox and summarize urgent items",
+     "timeout": 45, "long_press_command": "Check inbox and list ALL items with full details"},
+    {"id": "brief", "label": "BRIEF", "command": "Give me a briefing of my day", "timeout": 45},
     {"id": "queue", "label": "QUEUE", "command": "Execute next queued automation"},
     {"id": "focus", "label": "FOCUS", "command": "Activate focus mode"},
-    {"id": "status", "label": "STATUS", "command": "Report your current status"},
+    {"id": "status", "label": "STATUS", "command": "Report your current status", "timeout": 10},
     {"id": "voice", "label": "VOICE", "command": "__voice__"},
     {"id": "new_session", "label": "NEW", "command": "/new"},
+    {"id": "tasks", "label": "TASKS", "command": "Check my Vikunja tasks and list what needs to be done today",
+     "timeout": 45, "long_press_command": "Check my Vikunja tasks and give a detailed breakdown of everything due this week"},
 ]
+
+# Default command timeout in seconds
+COMMAND_TIMEOUT = 45.0
 
 # OpenClaw Connection (inherited from original config)
 OPENCLAW = {
@@ -170,6 +176,7 @@ TOUCH = {
     "debounce_ms": 100,
     "long_press_ms": 500,
     "tap_threshold_px": 15,  # Movement threshold to still count as tap
+    "button_flash_duration": 2.0,  # seconds for success/error flash
 }
 
 # Sprites

@@ -85,6 +85,38 @@ def clean_emoji(text: str) -> str:
     return emoji_pattern.sub('', text)
 
 
+def truncate_at_sentence(text: str, max_chars: int = 500) -> str:
+    """Truncate text at the nearest sentence boundary within max_chars.
+
+    Searches backwards from max_chars for sentence-ending punctuation (.!?)
+    followed by whitespace or end of string. Falls back to word boundary,
+    then hard cut if needed.
+    """
+    if not text or len(text) <= max_chars:
+        return text
+
+    # Search backwards for sentence boundary
+    search_region = text[:max_chars]
+    min_pos = max_chars // 3  # Only use sentence boundary if >1/3 preserved
+
+    best = -1
+    for i in range(len(search_region) - 1, min_pos - 1, -1):
+        if search_region[i] in '.!?' and (i + 1 >= len(search_region) or search_region[i + 1] in ' \n\t\r'):
+            best = i + 1
+            break
+
+    if best > 0:
+        return text[:best].rstrip()
+
+    # Fall back to word boundary
+    space_pos = search_region.rfind(' ', min_pos)
+    if space_pos > 0:
+        return text[:space_pos].rstrip() + "..."
+
+    # Hard cut
+    return text[:max_chars].rstrip() + "..."
+
+
 def clean_response_text(text: str) -> str:
     """Clean OpenClaw response text: strip markdown then remove emoji."""
     if not text:

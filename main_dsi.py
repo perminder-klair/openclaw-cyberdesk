@@ -35,7 +35,7 @@ from openclaw_bridge import OpenClawBridge
 from openclaw_config import OpenClawConfig
 from websocket_client import ConnectionState
 from ui.molty import MoltyState
-from ui.text_utils import clean_response_text
+from ui.text_utils import clean_response_text, truncate_at_sentence
 
 
 class DSICommandCenter:
@@ -63,6 +63,9 @@ class DSICommandCenter:
         self._was_connected = False
         self._active_button_id = None
         self._molty_state_timer = None
+
+        # Adaptive FPS
+        self._target_fps = config.DSI_DISPLAY["fps"]
 
         # Voice state
         self._voice_active = False
@@ -92,6 +95,7 @@ class DSICommandCenter:
             elif "Failed" in notification.message or "Error" in notification.message:
                 activity_type = "error"
                 status = "fail"
+                self.display.clear_streaming_text()
                 self._set_molty_state_with_timer(MoltyState.ERROR, 3.0)
                 self.hardware.set_led_state("error")
             elif notification.type == "info":
@@ -125,6 +129,7 @@ class DSICommandCenter:
             elif state == ConnectionState.DISCONNECTED:
                 if self._was_connected:
                     print("[Main] Disconnected from OpenClaw")
+                    self.display.clear_streaming_text()
                     self.display.add_activity("error", "Disconnected", "Connection lost")
                     self.display.set_molty_state(MoltyState.ERROR)
                     self.hardware.set_led_state("disconnected")
@@ -137,6 +142,7 @@ class DSICommandCenter:
         def on_message_chunk(msg_id, chunk):
             """Handle streaming message chunks."""
             self.display.set_molty_state(MoltyState.LISTENING)
+            self.display.append_streaming_text(msg_id, chunk)
 
         def on_status_update(status):
             """Handle status updates from OpenClaw."""
@@ -155,6 +161,10 @@ class DSICommandCenter:
         def on_message_complete(message):
             """Handle completed response from OpenClaw."""
             content = message.get("content", "")
+
+            # Clear streaming state before adding final entry
+            self.display.clear_streaming_text()
+
             self.display.add_activity("status", "Response", content, "done")
 
             # Auto-open overlay for button-triggered responses
@@ -171,9 +181,12 @@ class DSICommandCenter:
                 self._reset_button_after_delay(self._active_button_id, 1.0)
                 self._active_button_id = None
 
+            # Wake screen on response
+            self.hardware.set_brightness(config.PRESENCE_BACKLIGHT["near_brightness"])
+
             # Speak response aloud via TTS
             if content:
-                tts_text = clean_response_text(content[:500])
+                tts_text = clean_response_text(truncate_at_sentence(content, 500))
                 threading.Thread(
                     target=self.hardware.speak,
                     args=(tts_text,),
@@ -346,7 +359,7 @@ class DSICommandCenter:
                             self._active_button_id = None
                             self.hardware.set_led_state("idle")
 
-                    timer = threading.Timer(15.0, voice_command_timeout)
+                    timer = threading.Timer(config.COMMAND_TIMEOUT, voice_command_timeout)
                     timer.daemon = True
                     timer.start()
                 else:
@@ -422,6 +435,7 @@ class DSICommandCenter:
 
                     # Timeout handler
                     active_btn = button["id"]
+                    timeout_secs = button.get("timeout", config.COMMAND_TIMEOUT)
                     def command_timeout():
                         if self._active_button_id == active_btn:
                             print(f"[Main] Command timeout for {active_btn}")
@@ -431,7 +445,7 @@ class DSICommandCenter:
                             self._active_button_id = None
                             self.hardware.set_led_state("idle")
 
-                    timer = threading.Timer(15.0, command_timeout)
+                    timer = threading.Timer(timeout_secs, command_timeout)
                     timer.daemon = True
                     timer.start()
 
@@ -473,6 +487,48 @@ class DSICommandCenter:
                 self._cancel_voice()
                 return
 
+            # Check for button long-press alt commands
+            button = self.display.find_button(x, y)
+            if button and button.get("long_press_command"):
+                alt_command = button["long_press_command"]
+                print(f"[Main] Button long-press alt: {button['id']} -> {alt_command}")
+
+                self.display.set_button_state(button["id"], "pressed")
+
+                if self.bridge.is_connected():
+                    self.display.set_button_state(button["id"], "running")
+                    self._active_button_id = button["id"]
+
+                    self.display.add_activity(
+                        "tool",
+                        f"Command: {button['label']} (deep)",
+                        alt_command,
+                        "running"
+                    )
+                    self.display.set_molty_state(MoltyState.WORKING)
+                    self.hardware.set_led_state("working")
+
+                    self.bridge.send_message(alt_command)
+
+                    active_btn = button["id"]
+                    timeout_secs = button.get("timeout", config.COMMAND_TIMEOUT)
+                    def alt_command_timeout():
+                        if self._active_button_id == active_btn:
+                            print(f"[Main] Alt command timeout for {active_btn}")
+                            self.display.set_molty_state(MoltyState.IDLE)
+                            self.display.update_latest_activity_status("done")
+                            self.display.reset_button(active_btn)
+                            self._active_button_id = None
+                            self.hardware.set_led_state("idle")
+
+                    timer = threading.Timer(timeout_secs, alt_command_timeout)
+                    timer.daemon = True
+                    timer.start()
+                else:
+                    self.display.set_button_state(button["id"], "error")
+                    self._reset_button_after_delay(button["id"], 1.0)
+                return
+
             if x < config.LAYOUT["molty_panel_width"] and y < config.LAYOUT["button_panel_y_offset"]:
                 # Long press on Molty/status area (above buttons) - force reconnect
                 print("[Main] Molty area long press - forcing reconnect")
@@ -488,8 +544,26 @@ class DSICommandCenter:
                     self.display.set_molty_state(MoltyState.IDLE)
                     self.hardware.set_led_state("idle")
 
+        def on_drag(x, y, dx, dy):
+            """Handle drag events for scrolling."""
+            if self.display.is_overlay_visible():
+                # Scroll overlay: negative dy = swipe up = scroll down (show later content)
+                scroll_amount = -dy // 15  # Scale down for line-based scrolling
+                if scroll_amount != 0:
+                    self.display.scroll_overlay(scroll_amount)
+            else:
+                # Check if drag is in activity feed area (right panel)
+                molty_w = config.LAYOUT["molty_panel_width"]
+                if x > molty_w:
+                    # Scroll activity feed: swipe up = show older entries
+                    current = self.display.get_scroll_offset()
+                    scroll_delta = -dy // 20
+                    if scroll_delta != 0:
+                        self.display.set_scroll_offset(current + scroll_delta)
+
         self.touch.on_tap = on_tap
         self.touch.on_long_press = on_long_press
+        self.touch.on_drag = on_drag
 
     def _setup_presence_callback(self):
         """Configure presence change handler."""
@@ -591,8 +665,6 @@ class DSICommandCenter:
         self.running = True
         print("[Main] Starting main loop")
 
-        target_fps = config.DSI_DISPLAY["fps"]
-
         while self.running:
             try:
                 # Handle pygame events
@@ -622,6 +694,14 @@ class DSICommandCenter:
                         cost=status.get("api_cost", 0.0)
                     )
 
+                # Adaptive FPS selection
+                if self.display.is_streaming():
+                    self._target_fps = config.REFRESH["streaming_fps"]
+                elif self._active_button_id:
+                    self._target_fps = config.REFRESH["normal_fps"]
+                else:
+                    self._target_fps = config.REFRESH["idle_fps"]
+
                 # Render display
                 if self.screen:
                     surface = self.display.render_to_surface()
@@ -630,7 +710,7 @@ class DSICommandCenter:
 
                 # Frame rate control
                 if self.clock:
-                    self.clock.tick(target_fps)
+                    self.clock.tick(self._target_fps)
 
             except Exception as e:
                 print(f"[Main] Loop error: {e}")

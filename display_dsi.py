@@ -66,6 +66,12 @@ class DSIDisplay:
 
         # Overlay state
         self._overlay_entry: Optional[ActivityEntry] = None
+        self._overlay_scroll_offset = 0
+        self._overlay_total_lines = 0
+
+        # Streaming text state
+        self._streaming_msg_id: Optional[str] = None
+        self._streaming_text = ""
 
         # Pre-rendered button rects
         self._button_rects = []
@@ -157,6 +163,11 @@ class DSIDisplay:
         with self.lock:
             self._scroll_offset = max(0, offset)
 
+    def get_scroll_offset(self) -> int:
+        """Get activity feed scroll offset."""
+        with self.lock:
+            return self._scroll_offset
+
     def set_button_state(self, button_id: str, state: str):
         """Set button visual state."""
         with self.lock:
@@ -184,6 +195,8 @@ class DSIDisplay:
         """Show fullscreen overlay for an activity entry."""
         with self.lock:
             self._overlay_entry = entry
+            self._overlay_scroll_offset = 0
+            self._overlay_total_lines = 0
 
     def dismiss_overlay(self):
         """Dismiss the fullscreen overlay."""
@@ -194,6 +207,38 @@ class DSIDisplay:
         """Check if overlay is currently visible."""
         with self.lock:
             return self._overlay_entry is not None
+
+    def scroll_overlay(self, delta: int):
+        """Scroll the overlay content by delta lines."""
+        with self.lock:
+            if self._overlay_entry is None:
+                return
+            new_offset = self._overlay_scroll_offset + delta
+            max_scroll = max(0, self._overlay_total_lines - 1)
+            self._overlay_scroll_offset = max(0, min(new_offset, max_scroll))
+
+    # === Streaming Text ===
+
+    def append_streaming_text(self, msg_id: str, chunk: str):
+        """Accumulate streaming text chunks."""
+        with self.lock:
+            if self._streaming_msg_id != msg_id:
+                self._streaming_msg_id = msg_id
+                self._streaming_text = ""
+            self._streaming_text += chunk
+            if len(self._streaming_text) > 2000:
+                self._streaming_text = self._streaming_text[-2000:]
+
+    def clear_streaming_text(self):
+        """Clear streaming text state."""
+        with self.lock:
+            self._streaming_msg_id = None
+            self._streaming_text = ""
+
+    def is_streaming(self) -> bool:
+        """Check if currently streaming text."""
+        with self.lock:
+            return self._streaming_msg_id is not None
 
     def find_activity_entry(self, x: int, y: int) -> Optional[ActivityEntry]:
         """Find the activity entry at the given tap coordinates."""
@@ -325,6 +370,10 @@ class DSIDisplay:
         btn_panel_h = layout["button_panel_height"]
         self._draw_button_panel(draw, x, btn_panel_y, width, btn_panel_h)
 
+        # Connection status bar (below buttons)
+        status_y = btn_panel_y + btn_panel_h + 10
+        self._draw_connection_bar(draw, x, status_y, width)
+
         # Corner accents
         self._draw_corner_accents(draw, x + 5, y + 5, width - 10, height - 10)
 
@@ -363,20 +412,31 @@ class DSIDisplay:
         with self.lock:
             entries = list(self.activity_feed.entries)
             scroll_offset = self._scroll_offset
+            streaming_active = self._streaming_msg_id is not None
+            streaming_text = self._streaming_text if streaming_active else ""
 
         max_visible = layout["activity_max_visible"]
+
+        # Reserve first slot for streaming entry if active
+        slots_for_regular = max_visible - 1 if streaming_active else max_visible
         total = len(entries)
 
         if total > 0:
-            max_scroll = max(0, total - max_visible)
+            max_scroll = max(0, total - slots_for_regular)
             scroll_offset = max(0, min(scroll_offset, max_scroll))
             end_idx = total - scroll_offset
-            start_idx = max(0, end_idx - max_visible)
+            start_idx = max(0, end_idx - slots_for_regular)
             visible = list(reversed(entries[start_idx:end_idx]))
         else:
             visible = []
 
         entry_y = entries_y
+
+        # Draw streaming entry first if active
+        if streaming_active:
+            self._draw_streaming_entry(draw, x + 10, entry_y, width - 20, entry_h - 5, streaming_text)
+            entry_y += entry_h
+
         for entry in visible:
             if entry_y + entry_h > entries_y + entries_area_h:
                 break
@@ -446,6 +506,45 @@ class DSIDisplay:
                           font=self._fonts["medium"],
                           fill=config.COLORS["text_primary"])
 
+    def _draw_streaming_entry(self, draw: ImageDraw.Draw, x: int, y: int,
+                               width: int, height: int, text: str):
+        """Draw a streaming text entry with purple bar and live text."""
+        # Background
+        draw.rectangle([x, y, x + width, y + height], fill=(20, 20, 28))
+
+        # Purple color bar
+        bar_color = config.COLORS["electric_purple"]
+        draw.rectangle([x, y, x + 4, y + height], fill=bar_color)
+
+        text_x = x + 12
+        text_w = width - 40
+
+        # Row 1: "Streaming..." label
+        draw.text((text_x, y + 6), "Streaming...",
+                  font=self._fonts["small"], fill=bar_color)
+
+        # Pulsing dot
+        pulse = int((time.time() * 3) % 2)
+        if pulse:
+            dot_x = x + width - 15
+            dot_y = y + height // 2
+            draw.ellipse([dot_x - 6, dot_y - 6, dot_x + 6, dot_y + 6],
+                         fill=(*bar_color[:3], 60))
+            draw.ellipse([dot_x - 3, dot_y - 3, dot_x + 3, dot_y + 3],
+                         fill=bar_color)
+
+        # Row 2+3: Last 2 lines of streamed text
+        if text:
+            cleaned = clean_response_text(text)
+            wrapped = self._word_wrap(cleaned, self._fonts["medium"], text_w)
+            # Show last 2 lines
+            last_lines = wrapped[-2:] if len(wrapped) >= 2 else wrapped
+            for i, line in enumerate(last_lines):
+                line = self._truncate_text(line, self._fonts["medium"], text_w)
+                draw.text((text_x, y + 28 + i * 27), line,
+                          font=self._fonts["medium"],
+                          fill=config.COLORS["text_primary"])
+
     def _draw_button_panel(self, draw: ImageDraw.Draw, x: int, y: int, width: int, height: int):
         """Draw the command button panel."""
         layout = config.LAYOUT
@@ -501,11 +600,12 @@ class DSIDisplay:
         }
 
         # Auto-reset flash states
+        flash_duration = config.TOUCH.get("button_flash_duration", 2.0)
         current_time = time.time()
         with self.lock:
             for btn_id, flash_time in list(self._button_flash_times.items()):
                 state = self._button_states.get(btn_id)
-                if state in ("success", "error") and current_time - flash_time > 1.0:
+                if state in ("success", "error") and current_time - flash_time > flash_duration:
                     self._button_states[btn_id] = "normal"
 
         # Draw each button
@@ -567,6 +667,38 @@ class DSIDisplay:
 
         draw.text((label_x, label_y), label, font=self._fonts["medium"], fill=style["text"])
 
+    def _draw_connection_bar(self, draw: ImageDraw.Draw, x: int, y: int, width: int):
+        """Draw connection status, model name, and API cost."""
+        with self.lock:
+            connected = self._connection_status
+            model = self._model_name
+            cost = self._api_cost
+
+        padding = 12
+
+        # Connection dot
+        dot_color = config.COLORS["neon_green"] if connected else config.COLORS["neon_red"]
+        dot_x = x + padding + 6
+        dot_y = y + 8
+        draw.ellipse([dot_x - 5, dot_y - 5, dot_x + 5, dot_y + 5], fill=dot_color)
+
+        # ONLINE/OFFLINE text
+        status_text = "ONLINE" if connected else "OFFLINE"
+        draw.text((dot_x + 10, y + 1), status_text,
+                  font=self._fonts["small"], fill=dot_color)
+
+        # Model name (second row, truncated)
+        if model:
+            model_display = self._truncate_text(model, self._fonts["small"], width - 2 * padding)
+            draw.text((x + padding, y + 22), model_display,
+                      font=self._fonts["small"], fill=config.COLORS["text_dim"])
+
+        # API cost (third row)
+        if cost > 0:
+            cost_str = f"${cost:.4f}"
+            draw.text((x + padding, y + 42), cost_str,
+                      font=self._fonts["mono"], fill=config.COLORS["text_dim"])
+
     def _draw_corner_accents(self, draw: ImageDraw.Draw, x: int, y: int, width: int, height: int):
         """Draw corner accent marks."""
         accent_len = 12
@@ -620,7 +752,7 @@ class DSIDisplay:
         return lines
 
     def _draw_overlay(self, draw: ImageDraw.Draw, entry: ActivityEntry):
-        """Draw fullscreen overlay showing full entry content."""
+        """Draw fullscreen overlay showing full entry content with scroll support."""
         # Dark background fill
         draw.rectangle([0, 0, self.width, self.height], fill=(5, 5, 10, 230))
 
@@ -678,27 +810,54 @@ class DSIDisplay:
         draw.line([(content_x, sep_y), (panel_x2 - 25, sep_y)],
                   fill=config.COLORS["panel_border"], width=1)
 
-        # Word-wrapped detail text
+        # Word-wrapped detail text with scroll support
         text_y = sep_y + 12
         line_height = 34
         max_text_y = panel_y2 - 55  # Leave room for hint
+        visible_lines = max(1, (max_text_y - text_y) // line_height)
 
         if entry.detail:
             cleaned = clean_response_text(entry.detail)
             wrapped = self._word_wrap(cleaned, self._fonts["medium"], content_w)
-            for line in wrapped:
-                if text_y + line_height > max_text_y:
-                    draw.text((content_x, text_y), "...",
-                              font=self._fonts["medium"],
-                              fill=config.COLORS["text_dim"])
-                    break
-                draw.text((content_x, text_y), line,
+            total_lines = len(wrapped)
+
+            # Update total lines for scroll bounds
+            with self.lock:
+                self._overlay_total_lines = total_lines
+                scroll_offset = self._overlay_scroll_offset
+                # Clamp scroll offset
+                max_scroll = max(0, total_lines - visible_lines)
+                if scroll_offset > max_scroll:
+                    self._overlay_scroll_offset = max_scroll
+                    scroll_offset = max_scroll
+
+            # Render windowed slice
+            start_line = scroll_offset
+            end_line = min(start_line + visible_lines, total_lines)
+            for i, line in enumerate(wrapped[start_line:end_line]):
+                draw.text((content_x, text_y + i * line_height), line,
                           font=self._fonts["medium"],
                           fill=config.COLORS["text_primary"])
-                text_y += line_height
 
-        # "TAP TO CLOSE" hint centered at bottom
-        hint = "TAP TO CLOSE"
+            # Scroll indicators
+            scrollable = total_lines > visible_lines
+            if scrollable:
+                indicator_x = panel_x2 - 20
+                if scroll_offset > 0:
+                    # Up arrow
+                    draw.text((indicator_x, text_y), "^",
+                              font=self._fonts["small"],
+                              fill=config.COLORS["neon_cyan"])
+                if scroll_offset < total_lines - visible_lines:
+                    # Down arrow
+                    draw.text((indicator_x, max_text_y - 20), "v",
+                              font=self._fonts["small"],
+                              fill=config.COLORS["neon_cyan"])
+
+        # Hint at bottom
+        with self.lock:
+            scrollable = self._overlay_total_lines > visible_lines
+        hint = "SWIPE / TAP TO CLOSE" if scrollable else "TAP TO CLOSE"
         hint_bbox = self._fonts["mono"].getbbox(hint)
         hint_w = hint_bbox[2] - hint_bbox[0]
         hint_x = (panel_x1 + panel_x2 - hint_w) // 2

@@ -60,6 +60,7 @@ class TouchHandler:
         self._state = TouchState.IDLE
         self._touch_start: Optional[TouchPoint] = None
         self._last_tap_time = 0
+        self._last_drag_pos: Optional[Tuple[int, int]] = None
 
         # Callbacks
         self.on_tap: Optional[Callable[[int, int], None]] = None
@@ -141,6 +142,7 @@ class TouchHandler:
 
         # Reset state
         self._touch_start = None
+        self._last_drag_pos = None
         self._state = TouchState.IDLE
 
         return True
@@ -154,17 +156,20 @@ class TouchHandler:
         y = int(event.y * self.screen_size[1])
 
         # Check for long press timeout during touch
-        touch_duration_ms = (time.time() - self._touch_start.timestamp) * 1000
         distance = self._calculate_distance(
             self._touch_start.x, self._touch_start.y, x, y
         )
 
         # If moved too far, it's not a long press anymore
         if distance > self.tap_threshold_px:
-            # This is a drag
+            # Compute incremental delta from last drag position
+            if self._last_drag_pos is None:
+                self._last_drag_pos = (self._touch_start.x, self._touch_start.y)
+            dx = x - self._last_drag_pos[0]
+            dy = y - self._last_drag_pos[1]
+            self._last_drag_pos = (x, y)
+
             if self.on_drag:
-                dx = x - self._touch_start.x
-                dy = y - self._touch_start.y
                 self.on_drag(x, y, dx, dy)
 
         return True
@@ -203,6 +208,7 @@ class TouchHandler:
                     self._last_tap_time = current_time
 
         self._touch_start = None
+        self._last_drag_pos = None
         self._state = TouchState.IDLE
         return True
 
@@ -298,12 +304,9 @@ class ButtonHitTester:
             x = button_panel_x + padding + col * (btn_w + gap)
             y = button_panel_y + padding + row * (btn_h + gap)
 
-            self._button_rects.append({
-                "id": button_def["id"],
-                "label": button_def["label"],
-                "command": button_def["command"],
-                "rect": (x, y, btn_w, btn_h),
-            })
+            button_info = dict(button_def)
+            button_info["rect"] = (x, y, btn_w, btn_h)
+            self._button_rects.append(button_info)
 
     def find_button(self, x: int, y: int) -> Optional[dict]:
         """
